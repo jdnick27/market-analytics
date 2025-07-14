@@ -9,6 +9,7 @@ from signal_manager import SignalManager
 load_dotenv()
 api_key = os.getenv('YAHOO_FINANCE_API_KEY')
 
+# Define a list of tickers to read data from.
 tickers = ['AAPL', 'GOOGL', 'MSFT']
 
 def calculate_macd(data):
