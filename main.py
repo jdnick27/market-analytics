@@ -3,15 +3,12 @@ from dotenv import load_dotenv
 import os
 from datetime import datetime, timedelta
 import pandas as pd
-import numpy as np
 from indicators import MACD, RSI, VolumeIndicator
 from signal_manager import SignalManager
 
-# Load environment variables from .env file
 load_dotenv()
 api_key = os.getenv('YAHOO_FINANCE_API_KEY')
 
-# Define an array of tickers to read data from
 tickers = ['AAPL', 'GOOGL', 'MSFT']
 
 def calculate_macd(data):
@@ -53,7 +50,6 @@ def generate_signals(data):
     signals['Volume_Sell'] = ~volume_spike & (data['Volume'] < data['Volume'].shift(1))
     return signals
 
-# Fetch data and calculate signals for each ticker
 end_date = datetime.now()
 start_date = end_date - timedelta(days=30)  # Extend timeframe for indicators
 
@@ -65,27 +61,22 @@ for ticker in tickers:
         print(f"No data for {ticker}")
         continue
 
-    # Initialize indicators
     macd = MACD()
     rsi = RSI()
     volume = VolumeIndicator()
 
-    # Calculate indicators
     data = macd.calculate(data)
     data = rsi.calculate(data)
     data = volume.calculate(data)
 
-    # Manage signals
     manager = SignalManager()
     manager.add_signal('MACD_Signal', data['MACD_Signal'])
     manager.add_signal('RSI_Signal', data['RSI_Signal'])
     manager.add_signal('Volume_Signal', data['Volume_Signal'])
 
-    # Calculate composite signal
     weights = {'MACD_Signal': 0.5, 'RSI_Signal': 0.3, 'Volume_Signal': 0.2}
     composite_signals = manager.calculate_composite_signal(weights)
 
-    # Add ticker information and save results
     composite_signals['Ticker'] = ticker
     all_signals.append(composite_signals)
 
@@ -93,5 +84,4 @@ for ticker in tickers:
 if all_signals:
     combined_signals = pd.concat(all_signals)
     print(combined_signals)
-    # Save to CSV for further analysis
     combined_signals.to_csv('signals_output.csv', index=False)
