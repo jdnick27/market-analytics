@@ -8,9 +8,13 @@ class SignalManager:
         self.signals[name] = signal_data
 
     def calculate_composite_signal(self, weights: dict):
-        self.signals['Composite_Signal'] = sum(
-            self.signals[col] * weight for col, weight in weights.items()
-        )
+        """Return DataFrame with a weighted composite signal column."""
+        missing = set(weights) - set(self.signals.columns)
+        if missing:
+            raise KeyError(f"Missing signal columns: {', '.join(missing)}")
+
+        weighted = self.signals[list(weights.keys())].mul(pd.Series(weights))
+        self.signals['Composite_Signal'] = weighted.sum(axis=1)
         return self.signals
 
     def add_new_indicator(self, indicator_class, data: pd.DataFrame, **kwargs):
