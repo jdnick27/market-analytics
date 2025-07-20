@@ -18,6 +18,15 @@ class SignalManager:
         result['Composite_Signal'] = weighted.sum(axis=1)
         return result
 
-    def add_new_indicator(self, indicator_class, data: pd.DataFrame, **kwargs):
+    def add_new_indicator(
+        self, indicator_class, data: pd.DataFrame, signal_column: str, **kwargs
+    ):
+        """Calculate an indicator and store its signal column."""
         indicator = indicator_class(**kwargs)
-        return indicator.calculate(data)
+        updated = indicator.calculate(data)
+
+        if signal_column not in updated:
+            raise KeyError(f"{signal_column} not found in indicator output")
+
+        self.add_signal(signal_column, updated[signal_column])
+        return updated

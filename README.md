@@ -67,7 +67,8 @@ YAHOO_FINANCE_API_KEY=your_api_key_here
 
 1. Learn how to use `yfinance` for downloading historical data.
 2. Familiarize yourself with `pandas` for DataFrame operations.
-3. Experiment with adding or modifying indicators via `SignalManager.add_new_indicator`.
+3. Experiment with adding or modifying indicators via `SignalManager.add_new_indicator`,
+   which now accepts the name of the signal column to store.
 4. Consider adding tests or automation to improve reliability.
 5. Extend configuration (tickers, time ranges, weights) beyond the defaults in `main.py`.
 
