@@ -186,3 +186,51 @@ export async function getRSI(symbol: string, window = 14, timespan = 'day'): Pro
     throw err;
   }
 }
+
+/**
+ * Fetch daily aggregates for the past ~365 days and compute the 52-week high/low.
+ * Returns null if no data is available.
+ */
+export async function get52WeekHighLow(symbol: string, toDate: string): Promise<{ high: number; low: number } | null> {
+  if (!symbol) throw new Error('symbol is required');
+  if (!toDate) throw new Error('toDate is required (YYYY-MM-DD)');
+  const apiKey = getApiKey();
+  // compute from date ~365 days before toDate
+  const to = new Date(toDate);
+  const from = new Date(to);
+  from.setDate(from.getDate() - 365);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fromStr = `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`;
+  const toStr = `${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`;
+
+  const url = `${BASE}/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/1/day/${encodeURIComponent(fromStr)}/${encodeURIComponent(toStr)}`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, adjusted: true, limit: 1000 },
+      timeout: 15000,
+    });
+
+    const results = res.data?.results ?? [];
+    if (!Array.isArray(results) || results.length === 0) return null;
+
+    let high = Number.NEGATIVE_INFINITY;
+    let low = Number.POSITIVE_INFINITY;
+    for (const r of results) {
+      const h = Number(r.h);
+      const l = Number(r.l);
+      if (Number.isFinite(h) && h > high) high = h;
+      if (Number.isFinite(l) && l < low) low = l;
+    }
+
+    if (!Number.isFinite(high) || !Number.isFinite(low)) return null;
+    return { high, low };
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}

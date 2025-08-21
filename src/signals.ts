@@ -1,4 +1,4 @@
-import { getOpenClose, getSMA, getEMA, getMACD, getRSI } from './polygonClient';
+import { getOpenClose, getSMA, getEMA, getMACD, getRSI, get52WeekHighLow } from './polygonClient';
 
 export interface IndicatorSignal {
   indicator: string;
@@ -22,17 +22,20 @@ function previousDay(): string {
 }
 
 export async function generateSignals(symbol: string, date = previousDay()): Promise<IndicatorSignal[]> {
-  const [oc, smaArr, emaArr, macdArr, rsiArr] = await Promise.all([
+  const [oc, smaArr, emaArr, macdArr, rsiArr, hiLo] = await Promise.all([
     getOpenClose(symbol, date),
     getSMA(symbol),
     getEMA(symbol),
     getMACD(symbol),
     getRSI(symbol),
+    get52WeekHighLow(symbol, date),
   ]);
 
+  // oc is Polygon open-close response which has .close
   const price: number | undefined = oc?.close;
   const signals: IndicatorSignal[] = [];
 
+  // RSI signal
   const rsiValue = rsiArr?.[0]?.value;
   if (typeof rsiValue === 'number') {
     if (rsiValue > 70) {
@@ -46,6 +49,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     }
   }
 
+  // SMA signal
   const smaValue = smaArr?.[0]?.value;
   if (typeof smaValue === 'number' && typeof price === 'number') {
     const diffPerc = ((price - smaValue) / smaValue) * 100;
@@ -59,6 +63,36 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     }
   }
 
+  // 52-week high / low signal
+  if (hiLo && typeof price === 'number') {
+    const { high, low } = hiLo as { high: number; low: number };
+    if (Number.isFinite(high) && Number.isFinite(low) && high > 0 && low > 0) {
+      const distHighPerc = ((high - price) / high) * 100; // percent below the high
+      const distLowPerc = ((price - low) / low) * 100; // percent above the low
+
+      // thresholds (percent): within 1% of either extreme is notable
+      const threshold = 1.0;
+
+      if (distHighPerc <= threshold) {
+        // price is within threshold of 52w high -> consider taking profits (sell)
+        const closeness = Math.max(0, 1 - distHighPerc / threshold); // 0..1 where 1 = at high
+        let score = Math.min(100, Math.round(closeness * 100));
+        // small boost if extremely close (within 0.25%)
+        if (distHighPerc <= 0.25) score = Math.min(100, score + 10);
+        signals.push({ indicator: '52W', value: high, signal: 'sell', score });
+      } else if (distLowPerc <= threshold) {
+        // price is within threshold of 52w low -> consider buying (oversold)
+        const closeness = Math.max(0, 1 - distLowPerc / threshold); // 0..1 where 1 = at low
+        let score = Math.min(100, Math.round(closeness * 100));
+        if (distLowPerc <= 0.25) score = Math.min(100, score + 10);
+        signals.push({ indicator: '52W', value: low, signal: 'buy', score });
+      } else {
+        signals.push({ indicator: '52W', value: price, signal: 'hold', score: 0 });
+      }
+    }
+  }
+
+  // EMA signal
   const emaValue = emaArr?.[0]?.value;
   if (typeof emaValue === 'number' && typeof price === 'number') {
     const diffPerc = ((price - emaValue) / emaValue) * 100;
@@ -76,6 +110,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   // We prefer setups where the histogram has bottomed (more negative previously) and
   // is now rising toward zero while the MACD line is approaching the signal line
   // (i.e., the MACD - signal difference is shrinking and moving toward a positive cross).
+  // Also consider crosses of the 0.00 baseline (for MACD and histogram) as a bullish/bearish confirmation.
   const macdArrRaw = macdArr ?? [];
   if (Array.isArray(macdArrRaw) && macdArrRaw.length > 0) {
     // Ensure we have newest-first ordering by timestamp when available.
@@ -108,16 +143,28 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
         });
       } else {
         // Determine whether the histogram has recently bottomed and is rising
-        const histMin = Math.min(...hist.filter(Number.isFinite));
+        const histFinite = hist.filter(Number.isFinite);
+        const histMin = histFinite.length ? Math.min(...histFinite) : NaN;
         const histMinIdx = hist.indexOf(histMin); // index in recent (0 = newest)
         const prevHist = hist[1];
         const histRising = Number.isFinite(prevHist) ? currentHist > prevHist : false;
 
         // Compute MACD - signal diffs and whether they're approaching a cross
-        const diffs = recent.map((r: any, i: number) => Number.isFinite(macdVals[i]) && Number.isFinite(sigVals[i]) ? macdVals[i] - sigVals[i] : NaN);
+        const diffs = recent.map((r: any, i: number) =>
+          Number.isFinite(macdVals[i]) && Number.isFinite(sigVals[i]) ? macdVals[i] - sigVals[i] : NaN
+        );
         const currDiff = diffs[0];
         const prevDiff = diffs[1];
-        const approaching = Number.isFinite(currDiff) && Number.isFinite(prevDiff) ? Math.abs(prevDiff) > Math.abs(currDiff) && currDiff > prevDiff : false;
+        const approaching = Number.isFinite(currDiff) && Number.isFinite(prevDiff)
+          ? Math.abs(prevDiff) > Math.abs(currDiff) && currDiff > prevDiff
+          : false;
+
+        // Baseline (0.00) crossover checks for MACD line and histogram
+        const prevMacd = macdVals[1];
+        const macdCrossUp = Number.isFinite(prevMacd) ? currentMacd > 0 && prevMacd <= 0 : false;
+        const macdCrossDown = Number.isFinite(prevMacd) ? currentMacd < 0 && prevMacd >= 0 : false;
+        const histCrossUp = Number.isFinite(prevHist) ? currentHist > 0 && prevHist <= 0 : false;
+        const histCrossDown = Number.isFinite(prevHist) ? currentHist < 0 && prevHist >= 0 : false;
 
         // Score: prefer a deep bottom (big negative hist min) + strong approach to cross
         let score = Math.min(100, Math.round(Math.abs(currentHist) * 100));
@@ -125,13 +172,22 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
         if (histMinIdx > 0 && histRising && approaching) {
           // deeper bottom increases score; approaching improvement increases score
           const depthScore = Math.min(100, Math.round(Math.abs(histMin) * 100));
-          const approachImprovement = Number.isFinite(prevDiff) && Math.abs(prevDiff) > 0 ? Math.min(100, Math.round(((Math.abs(prevDiff) - Math.abs(currDiff)) / Math.abs(prevDiff)) * 100)) : 0;
+          const approachImprovement = Number.isFinite(prevDiff) && Math.abs(prevDiff) > 0
+            ? Math.min(100, Math.round(((Math.abs(prevDiff) - Math.abs(currDiff)) / Math.abs(prevDiff)) * 100))
+            : 0;
           // blend depth and approach (60% depth, 40% approach)
           score = Math.min(100, Math.round(depthScore * 0.6 + approachImprovement * 0.4));
         }
 
-        // Determine directional signal
-        if (currentHist > 0 && currDiff > 0) {
+        // Boost score if we observe baseline cross confirmations
+        if (macdCrossUp || histCrossUp) {
+          score = Math.min(100, score + 20); // bullish confirmation
+        } else if (macdCrossDown || histCrossDown) {
+          score = Math.min(100, score + 20); // bearish confirmation
+        }
+
+        // Determine directional signal (consider cross-of-zero as confirmation/override)
+        if ((currentHist > 0 && currDiff > 0) || macdCrossUp || histCrossUp) {
           signals.push({
             indicator: 'MACD',
             macd: { value: currentMacd, signal: currentSignal, histogram: currentHist },
@@ -146,7 +202,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
             signal: 'buy',
             score,
           });
-        } else if (currentHist < 0 && currDiff < 0) {
+        } else if ((currentHist < 0 && currDiff < 0) || macdCrossDown || histCrossDown) {
           signals.push({
             indicator: 'MACD',
             macd: { value: currentMacd, signal: currentSignal, histogram: currentHist },
