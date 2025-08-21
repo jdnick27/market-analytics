@@ -1,6 +1,17 @@
 import axios from 'axios';
+import http from 'http';
+import https from 'https';
 
 const BASE = 'https://api.polygon.io';
+
+// Configure global axios agents to reuse sockets and limit concurrent sockets.
+// This reduces the chance of `ECONNRESET` / "socket hang up" when the app
+// makes many parallel requests.
+axios.defaults.httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50 });
+axios.defaults.httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50 });
+
+// Global request timeout (ms) — set to 2 minutes
+export const REQUEST_TIMEOUT = 120000;
 
 function getApiKey(): string {
   const k = process.env.POLYGON_API_KEY;
@@ -14,7 +25,7 @@ export async function listTickers(limit = 3): Promise<string[]> {
   try {
     const res = await axios.get(url, {
       params: { apiKey, market: 'stocks', active: true, limit },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     return res.data?.results?.map((t: any) => t.ticker) ?? [];
   } catch (err: any) {
@@ -33,7 +44,7 @@ export async function getTicker(ticker: string): Promise<any> {
   const apiKey = getApiKey();
   const url = `${BASE}/v3/reference/tickers/${encodeURIComponent(ticker)}`;
   try {
-    const res = await axios.get(url, { params: { apiKey }, timeout: 10000 });
+  const res = await axios.get(url, { params: { apiKey }, timeout: REQUEST_TIMEOUT });
     return res.data;
   } catch (err: any) {
     if (err.response) {
@@ -51,7 +62,7 @@ export async function fetchLastTrade(symbol: string): Promise<any> {
   const apiKey = getApiKey();
   const url = `${BASE}/v2/last/trade/${encodeURIComponent(symbol)}`;
   try {
-    const res = await axios.get(url, { params: { apiKey }, timeout: 10000 });
+  const res = await axios.get(url, { params: { apiKey }, timeout: REQUEST_TIMEOUT });
     return res.data;
   } catch (err: any) {
     if (err.response) {
@@ -70,7 +81,7 @@ export async function getOpenClose(symbol: string, date: string): Promise<any> {
   const apiKey = getApiKey();
   const url = `${BASE}/v1/open-close/${encodeURIComponent(symbol)}/${encodeURIComponent(date)}`;
   try {
-    const res = await axios.get(url, { params: { apiKey }, timeout: 10000 });
+  const res = await axios.get(url, { params: { apiKey }, timeout: REQUEST_TIMEOUT });
     return res.data;
   } catch (err: any) {
     if (err.response) {
@@ -92,7 +103,7 @@ export async function getSMA(symbol: string, window = 50, timespan = 'day'): Pro
   try {
     const res = await axios.get(url, {
       params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     // return only the values array/object from the API response
     return res.data?.results?.values ?? [];
@@ -114,7 +125,7 @@ export async function getEMA(symbol: string, window = 50, timespan = 'day'): Pro
   try {
     const res = await axios.get(url, {
       params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     // return only the values array/object from the API response
     return res.data?.results?.values ?? [];
@@ -150,7 +161,7 @@ export async function getMACD(
         series_type: 'close',
         limit: 1,
       },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     // return only the values array/object from the API response
     return res.data?.results?.values ?? [];
@@ -172,7 +183,7 @@ export async function getRSI(symbol: string, window = 14, timespan = 'day'): Pro
   try {
     const res = await axios.get(url, {
       params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     // return only the values array/object from the API response
     return res.data?.results?.values ?? [];
@@ -207,7 +218,7 @@ export async function get52WeekHighLow(symbol: string, toDate: string): Promise<
   try {
     const res = await axios.get(url, {
       params: { apiKey, adjusted: true, limit: 1000 },
-      timeout: 15000,
+      timeout: REQUEST_TIMEOUT,
     });
 
     const results = res.data?.results ?? [];
@@ -245,7 +256,7 @@ export async function getShortInterest(ticker: string): Promise<any> {
   try {
     const res = await axios.get(url, {
       params: { apiKey, ticker },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     const results = res.data?.results;
     return Array.isArray(results) ? results[0] ?? null : results ?? null;
@@ -269,7 +280,7 @@ export async function getShortVolume(ticker: string, date: string): Promise<any>
   try {
     const res = await axios.get(url, {
       params: { apiKey, ticker, date },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     const results = res.data?.results;
     return Array.isArray(results) ? results[0] ?? null : results ?? null;
@@ -330,7 +341,7 @@ export async function getFinancials(ticker: string): Promise<any> {
   try {
     const res = await axios.get(url, {
       params: { apiKey, ticker, limit: 1 },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     const results = res.data?.results;
     return Array.isArray(results) ? results[0] ?? null : results ?? null;
@@ -363,7 +374,7 @@ export async function getFinancialsHistory(
   try {
     const res = await axios.get(url, {
       params: { apiKey, ticker, timeframe, limit },
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT,
     });
     const results: any[] = Array.isArray(res.data?.results) ? res.data.results : [];
     // Sort by end_date descending so index 0 is the most recent filing

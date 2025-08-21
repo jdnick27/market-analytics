@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { generateSignals, IndicatorSignal } from './signals';
-import { listTickers } from './polygonClient';
+import { formatPosts, Snapshot } from './makePosts';
 
 // tiny contract:
 // input: none – fetches an array of tickers from Polygon.io
@@ -36,13 +36,24 @@ async function main(): Promise<void> {
   const date = previousDay();
   console.log(`Generating signals for ${tickers.join(', ')} on ${date}`);
   try {
-    const results = await Promise.all(
-      tickers.map(async (symbol) => {
-        const signals = await generateSignals(symbol, date);
-        const score = aggregateSignalScore(signals);
-        return { symbol, signals, score };
-      }),
-    );
+    // Process tickers in small batches to avoid opening too many simultaneous
+    // connections to the Polygon API which can cause "socket hang up" errors.
+    async function mapBatched<T, R>(items: T[], batchSize: number, fn: (t: T) => Promise<R>) {
+      const out: R[] = [];
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const res = await Promise.all(batch.map(fn));
+        out.push(...res);
+      }
+      return out;
+    }
+
+    const BATCH_SIZE = 5;
+    const results = await mapBatched(tickers, BATCH_SIZE, async (symbol) => {
+      const signals = await generateSignals(symbol, date);
+      const score = aggregateSignalScore(signals);
+      return { symbol, signals, score };
+    });
 
     results.forEach(({ symbol, signals, score }) => {
       console.log(`\n${symbol} signals:`, signals);
@@ -52,6 +63,27 @@ async function main(): Promise<void> {
     const sorted = results.slice().sort((a, b) => b.score - a.score);
     const bestTickers = sorted.filter((r) => r.score > 0);
     console.log('\nBest tickers to buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
+
+    // Create posts summarizing signals for the top 5 tickers to buy
+    const topFive = bestTickers.slice(0, 5);
+    const snapshots: Snapshot[] = topFive.map(({ symbol, signals, score }) => ({
+      ticker: symbol,
+      score,
+      indicators: Object.fromEntries(
+        signals.map((s) => [s.indicator, s.signal])
+      ) as Record<string, 'buy' | 'sell' | 'hold'>,
+    }));
+
+    const posts = formatPosts(snapshots, {
+      maxBullets: 3,
+      emojis: {
+        header: ['🚀', '📉', '📊'],
+        strength: '🟢',
+        weakness: '🔴',
+      },
+      hashtags: [],
+    });
+    console.log('\nPosts:', posts);
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;
