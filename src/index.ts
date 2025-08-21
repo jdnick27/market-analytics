@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { generateSignals, IndicatorSignal } from './signals';
-import { listTickers } from './polygonClient';
+import { formatPosts, Snapshot } from './makePosts';
 
 // tiny contract:
 // input: none – fetches an array of tickers from Polygon.io
@@ -52,6 +52,27 @@ async function main(): Promise<void> {
     const sorted = results.slice().sort((a, b) => b.score - a.score);
     const bestTickers = sorted.filter((r) => r.score > 0);
     console.log('\nBest tickers to buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
+
+    // Create posts summarizing signals for the top 5 tickers to buy
+    const topFive = bestTickers.slice(0, 5);
+    const snapshots: Snapshot[] = topFive.map(({ symbol, signals, score }) => ({
+      ticker: symbol,
+      score,
+      indicators: Object.fromEntries(
+        signals.map((s) => [s.indicator, s.signal])
+      ) as Record<string, 'buy' | 'sell' | 'hold'>,
+    }));
+
+    const posts = formatPosts(snapshots, {
+      maxBullets: 3,
+      emojis: {
+        header: ['🚀', '📉', '📊'],
+        strength: '🟢',
+        weakness: '🔴',
+      },
+      hashtags: ['stocks', 'signals'],
+    });
+    console.log('\nPosts:', posts);
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;
