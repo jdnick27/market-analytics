@@ -2,6 +2,12 @@ import { getOpenClose, getSMA, getEMA, getMACD, getRSI } from './polygonClient';
 
 export interface IndicatorSignal {
   indicator: string;
+  value?: number;
+  macd?: {
+    value: number;
+    signal: number;
+    histogram: number;
+  };
   signal: 'buy' | 'sell' | 'hold';
   score: number; // 0 (neutral) to 100 (strong)
 }
@@ -31,12 +37,12 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   if (typeof rsiValue === 'number') {
     if (rsiValue > 70) {
       const score = Math.min(100, Math.round(((rsiValue - 70) / 30) * 100));
-      signals.push({ indicator: 'RSI', signal: 'sell', score });
+      signals.push({ indicator: 'RSI', value: rsiValue, signal: 'sell', score });
     } else if (rsiValue < 30) {
       const score = Math.min(100, Math.round(((30 - rsiValue) / 30) * 100));
-      signals.push({ indicator: 'RSI', signal: 'buy', score });
+      signals.push({ indicator: 'RSI', value: rsiValue, signal: 'buy', score });
     } else {
-      signals.push({ indicator: 'RSI', signal: 'hold', score: 0 });
+      signals.push({ indicator: 'RSI', value: rsiValue, signal: 'hold', score: 0 });
     }
   }
 
@@ -45,11 +51,11 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     const diffPerc = ((price - smaValue) / smaValue) * 100;
     const score = Math.min(100, Math.round(Math.abs(diffPerc)));
     if (Math.abs(diffPerc) < 0.1) {
-      signals.push({ indicator: 'SMA', signal: 'hold', score: 0 });
+      signals.push({ indicator: 'SMA', value: smaValue, signal: 'hold', score: 0 });
     } else if (diffPerc > 0) {
-      signals.push({ indicator: 'SMA', signal: 'buy', score });
+      signals.push({ indicator: 'SMA', value: smaValue, signal: 'buy', score });
     } else {
-      signals.push({ indicator: 'SMA', signal: 'sell', score });
+      signals.push({ indicator: 'SMA', value: smaValue, signal: 'sell', score });
     }
   }
 
@@ -58,25 +64,42 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     const diffPerc = ((price - emaValue) / emaValue) * 100;
     const score = Math.min(100, Math.round(Math.abs(diffPerc)));
     if (Math.abs(diffPerc) < 0.1) {
-      signals.push({ indicator: 'EMA', signal: 'hold', score: 0 });
+      signals.push({ indicator: 'EMA', value: emaValue, signal: 'hold', score: 0 });
     } else if (diffPerc > 0) {
-      signals.push({ indicator: 'EMA', signal: 'buy', score });
+      signals.push({ indicator: 'EMA', value: emaValue, signal: 'buy', score });
     } else {
-      signals.push({ indicator: 'EMA', signal: 'sell', score });
+      signals.push({ indicator: 'EMA', value: emaValue, signal: 'sell', score });
     }
   }
 
-  const macdVal = macdArr?.[0]?.macd;
+  const macdVal = macdArr?.[0]?.value;
   const macdSignal = macdArr?.[0]?.signal;
-  if (typeof macdVal === 'number' && typeof macdSignal === 'number') {
-    const diff = macdVal - macdSignal;
+  const macdHist = macdArr?.[0]?.histogram;
+  if (typeof macdVal === 'number' && typeof macdSignal === 'number' && typeof macdHist === 'number') {
+    // histogram is typically macd - signal; use it for direction/strength
+    const diff = macdHist;
     const score = Math.min(100, Math.round(Math.abs(diff) * 100));
     if (Math.abs(diff) < 0.01) {
-      signals.push({ indicator: 'MACD', signal: 'hold', score: 0 });
+      signals.push({
+        indicator: 'MACD',
+        macd: { value: macdVal, signal: macdSignal, histogram: macdHist },
+        signal: 'hold',
+        score: 0,
+      });
     } else if (diff > 0) {
-      signals.push({ indicator: 'MACD', signal: 'buy', score });
+      signals.push({
+        indicator: 'MACD',
+        macd: { value: macdVal, signal: macdSignal, histogram: macdHist },
+        signal: 'buy',
+        score,
+      });
     } else {
-      signals.push({ indicator: 'MACD', signal: 'sell', score });
+      signals.push({
+        indicator: 'MACD',
+        macd: { value: macdVal, signal: macdSignal, histogram: macdHist },
+        signal: 'sell',
+        score,
+      });
     }
   }
 
