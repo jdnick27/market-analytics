@@ -240,10 +240,15 @@ export async function get52WeekHighLow(symbol: string, toDate: string): Promise<
 export async function getShortInterest(ticker: string): Promise<any> {
   if (!ticker) throw new Error('ticker is required');
   const apiKey = getApiKey();
-  const url = `${BASE}/v3/reference/short_interest/${encodeURIComponent(ticker)}`;
+  // Polygon docs: https://polygon.io/docs/rest/stocks/fundamentals/short-interest
+  const url = `${BASE}/stocks/v1/short-interest`;
   try {
-    const res = await axios.get(url, { params: { apiKey, limit: 1 }, timeout: 10000 });
-    return res.data?.results?.[0] ?? null;
+    const res = await axios.get(url, {
+      params: { apiKey, ticker },
+      timeout: 10000,
+    });
+    const results = res.data?.results;
+    return Array.isArray(results) ? results[0] ?? null : results ?? null;
   } catch (err: any) {
     if (err.response) {
       const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
@@ -259,10 +264,15 @@ export async function getShortVolume(ticker: string, date: string): Promise<any>
   if (!ticker) throw new Error('ticker is required');
   if (!date) throw new Error('date is required (YYYY-MM-DD)');
   const apiKey = getApiKey();
-  const url = `${BASE}/v2/reference/short_volume/${encodeURIComponent(ticker)}`;
+  // Polygon docs: https://polygon.io/docs/rest/stocks/fundamentals/short-volume
+  const url = `${BASE}/stocks/v1/short-volume`;
   try {
-    const res = await axios.get(url, { params: { apiKey, date }, timeout: 10000 });
-    return res.data;
+    const res = await axios.get(url, {
+      params: { apiKey, ticker, date },
+      timeout: 10000,
+    });
+    const results = res.data?.results;
+    return Array.isArray(results) ? results[0] ?? null : results ?? null;
   } catch (err: any) {
     if (err.response) {
       const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
