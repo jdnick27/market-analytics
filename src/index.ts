@@ -25,11 +25,9 @@ function aggregateSignalScore(signals: IndicatorSignal[]): number {
 }
 
 async function main(): Promise<void> {
-  const tickers = ['NVDA','MSFT','BCH','AMZN','TLK','KOF','AVGO','FMX','AMX','HSBC',
- 'TSLA','WMT','JPM','TV','CMS','PDD','LLY','V','ORCL','HDB',
- 'BP','MA','NFLX','XOM','COST','JNJ','NTES','HD','CX','PLTR',
- 'PG','EC','ABBV','BAC','CHT','NGG','SAP','CVX','KO','TMUS',
- 'ASML','BCS','VOD','UNH','BHP','AMD','LYG','CSCO','PM','DEO',
+  const tickers = ['NVDA','MSFT','AMZN','AVGO','HSBC',
+ 'TSLA','WMT','JPM','V', 'BP','MA','NFLX','COST','JNJ','HD','PLTR',
+ 'PG','ABBV','BAC','SAP','KO', 'ASML','UNH','CSCO','PM',
  'AMC', 'GME', 'HITI', 'RKLB', 'BULL', 'APLD', 'EOSE', 'UROY',
  'COIN', 'BKNG', 'SMR', 'BABA', 'AMD', 'IBM', 'HYMC', 'INTC',
  'CRON', 'TLRY', 'CGC', 'ACB', 'SNDL', 'CRM', 'TSM'];
@@ -44,10 +42,10 @@ async function main(): Promise<void> {
       }),
     );
 
-    results.forEach(({ symbol, signals, score }) => {
-      console.log(`\n${symbol} signals:`, signals);
-      console.log(`Total score: ${score}`);
-    });
+    // results.forEach(({ symbol, signals, score }) => {
+    //   console.log(`\n${symbol} signals:`, signals);
+    //   console.log(`Total score: ${score}`);
+    // });
 
     const sorted = results.slice().sort((a, b) => b.score - a.score);
     const bestTickers = sorted.filter((r) => r.score > 0);
@@ -58,8 +56,8 @@ async function main(): Promise<void> {
     const posts = topFive.map(({ symbol, signals, score }) => {
       const summary = signals
         .map((s) => `${s.indicator}: ${s.signal}`)
-        .join(', ');
-      return `${symbol} - ${summary}. Total score: ${score}`;
+        .join(',\n');
+      return `${symbol}:\n${summary}. Total score: ${score}`;
     });
     console.log('\nPosts:', posts);
   } catch (err: any) {
