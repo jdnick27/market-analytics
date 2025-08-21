@@ -315,3 +315,32 @@ export async function getSharesOutstanding(ticker: string): Promise<number | nul
     throw err;
   }
 }
+
+// Financial statements
+
+/**
+ * Fetch the latest financials for a given ticker.
+ * Docs: https://polygon.io/docs/rest/stocks/fundamentals/financials
+ * Returns the first result object or null if none.
+ */
+export async function getFinancials(ticker: string): Promise<any> {
+  if (!ticker) throw new Error('ticker is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/vX/reference/financials`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, ticker, limit: 1 },
+      timeout: 10000,
+    });
+    const results = res.data?.results;
+    return Array.isArray(results) ? results[0] ?? null : results ?? null;
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}

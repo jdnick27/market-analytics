@@ -9,6 +9,7 @@ import {
   getShortVolume,
   getTicker,
   getSharesOutstanding,
+  getFinancials,
 } from './polygonClient';
 
 export interface IndicatorSignal {
@@ -33,7 +34,18 @@ function previousDay(): string {
 }
 
 export async function generateSignals(symbol: string, date = previousDay()): Promise<IndicatorSignal[]> {
-  const [oc, smaArr, emaArr, macdArr, rsiArr, hiLo, shortVol, shortInt, sharesOutstanding] = await Promise.all([
+  const [
+    oc,
+    smaArr,
+    emaArr,
+    macdArr,
+    rsiArr,
+    hiLo,
+    shortVol,
+    shortInt,
+    sharesOutstanding,
+    fin,
+  ] = await Promise.all([
     getOpenClose(symbol, date),
     getSMA(symbol),
     getEMA(symbol),
@@ -43,6 +55,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     getShortVolume(symbol, date),
     getShortInterest(symbol),
     getSharesOutstanding(symbol),
+    getFinancials(symbol),
   ]);
 
   // oc is Polygon open-close response which has .close
@@ -297,6 +310,107 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
           });
         }
       }
+    }
+  }
+
+  // Fundamental financial signals
+  if (fin && fin.financials) {
+    const fs = fin.financials;
+
+    // Current ratio: current assets / current liabilities
+    const ca = fs.balance_sheet?.current_assets?.value;
+    const cl = fs.balance_sheet?.current_liabilities?.value;
+    if (Number.isFinite(ca) && Number.isFinite(cl) && cl !== 0) {
+      const ratio = ca / cl;
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = 0;
+      if (ratio > 1.5) {
+        signal = 'buy';
+        score = Math.min(100, Math.round((ratio - 1.5) * 50));
+      } else if (ratio < 1) {
+        signal = 'sell';
+        score = Math.min(100, Math.round((1 - ratio) * 100));
+      }
+      signals.push({ indicator: 'Current Ratio', value: ratio, signal, score });
+    }
+
+    // Debt to equity: liabilities / equity
+    const liab = fs.balance_sheet?.liabilities?.value;
+    const eq = fs.balance_sheet?.equity?.value;
+    if (Number.isFinite(liab) && Number.isFinite(eq) && eq !== 0) {
+      const ratio = liab / eq;
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = 0;
+      if (ratio < 1) {
+        signal = 'buy';
+        score = Math.min(100, Math.round((1 - ratio) * 100));
+      } else if (ratio > 2) {
+        signal = 'sell';
+        score = Math.min(100, Math.round((ratio - 2) * 50));
+      }
+      signals.push({ indicator: 'Debt/Equity', value: ratio, signal, score });
+    }
+
+    // Net margin: net income / revenues
+    const rev = fs.income_statement?.revenues?.value;
+    const net = fs.income_statement?.net_income_loss?.value;
+    if (Number.isFinite(rev) && Number.isFinite(net) && rev !== 0) {
+      const margin = net / rev;
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = 0;
+      if (margin > 0.1) {
+        signal = 'buy';
+        score = Math.min(100, Math.round(margin * 1000));
+      } else if (margin < 0) {
+        signal = 'sell';
+        score = Math.min(100, Math.round(Math.abs(margin) * 1000));
+      }
+      signals.push({ indicator: 'Net Margin', value: margin, signal, score });
+    }
+
+    // Operating cash flow
+    const opCash = fs.cash_flow_statement?.net_cash_flow_from_operating_activities?.value;
+    if (Number.isFinite(opCash)) {
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = Math.min(100, Math.round(Math.abs(opCash) / 1e6));
+      if (opCash > 0) {
+        signal = 'buy';
+      } else if (opCash < 0) {
+        signal = 'sell';
+      } else {
+        score = 0;
+      }
+      signals.push({ indicator: 'Operating Cash Flow', value: opCash, signal, score });
+    }
+
+    // Net cash flow
+    const netCash = fs.cash_flow_statement?.net_cash_flow?.value;
+    if (Number.isFinite(netCash)) {
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = Math.min(100, Math.round(Math.abs(netCash) / 1e6));
+      if (netCash > 0) {
+        signal = 'buy';
+      } else if (netCash < 0) {
+        signal = 'sell';
+      } else {
+        score = 0;
+      }
+      signals.push({ indicator: 'Net Cash Flow', value: netCash, signal, score });
+    }
+
+    // Comprehensive income
+    const compInc = fs.comprehensive_income?.comprehensive_income_loss?.value;
+    if (Number.isFinite(compInc)) {
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = Math.min(100, Math.round(Math.abs(compInc) / 1e6));
+      if (compInc > 0) {
+        signal = 'buy';
+      } else if (compInc < 0) {
+        signal = 'sell';
+      } else {
+        score = 0;
+      }
+      signals.push({ indicator: 'Comprehensive Income', value: compInc, signal, score });
     }
   }
 
