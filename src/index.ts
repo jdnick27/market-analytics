@@ -1,11 +1,10 @@
 import 'dotenv/config';
-import { getOpenClose } from './polygonClient';
-import { generateSignals } from './signals';
+import { generateSignals, IndicatorSignal } from './signals';
 
 // tiny contract:
-// input: symbol (string) via CLI arg or default 'AAPL'
-// optional date (YYYY-MM-DD) via second arg; defaults to today
-// output: prints the daily open/close summary to console
+// input: none – uses a fixed array of tickers
+// output: prints indicator signals for each ticker and
+//         lists the best tickers to buy based on aggregated scores
 
 function previousDay(): string {
     const d = new Date();
@@ -16,17 +15,35 @@ function previousDay(): string {
     return `${y}-${m}-${day}`;
 }
 
-async function main(): Promise<void> {
-  const symbol = 'AAPL';
-  const date = previousDay();
-  console.log(`Fetching open/close for: ${symbol} on ${date}`);
-  try {
-    const data = await getOpenClose(symbol, date);
-    console.log('Open/Close summary:');
-    console.dir(data, { depth: null });
+function aggregateSignalScore(signals: IndicatorSignal[]): number {
+  return signals.reduce((total, s) => {
+    if (s.signal === 'buy') return total + s.score;
+    if (s.signal === 'sell') return total - s.score;
+    return total;
+  }, 0);
+}
 
-    const signals = await generateSignals(symbol, date);
-    console.log('Signals:', signals);
+async function main(): Promise<void> {
+  const tickers = ['AAPL', 'MSFT', 'GOOGL'];
+  const date = previousDay();
+  console.log(`Generating signals for ${tickers.join(', ')} on ${date}`);
+  try {
+    const results = await Promise.all(
+      tickers.map(async (symbol) => {
+        const signals = await generateSignals(symbol, date);
+        const score = aggregateSignalScore(signals);
+        return { symbol, signals, score };
+      }),
+    );
+
+    results.forEach(({ symbol, signals, score }) => {
+      console.log(`\n${symbol} signals:`, signals);
+      console.log(`Total score: ${score}`);
+    });
+
+    const sorted = results.slice().sort((a, b) => b.score - a.score);
+    const bestTickers = sorted.filter((r) => r.score > 0);
+    console.log('\nBest tickers to buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;
