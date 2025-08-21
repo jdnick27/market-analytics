@@ -1,2 +1,0 @@
-# market-analytics
-market-analytics
