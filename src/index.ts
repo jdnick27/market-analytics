@@ -70,7 +70,7 @@ async function main(): Promise<void> {
         strength: '🟢',
         weakness: '🔴',
       },
-      hashtags: ['stocks', 'signals'],
+      hashtags: topFive.map((r) => r.symbol),
     });
     console.log('\nPosts:', posts);
   } catch (err: any) {
