@@ -74,7 +74,8 @@ export async function getSMA(symbol: string, window = 50, timespan = 'day'): Pro
       params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
       timeout: 10000,
     });
-    return res.data;
+    // return only the values array/object from the API response
+    return res.data?.results?.values ?? [];
   } catch (err: any) {
     if (err.response) {
       const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
@@ -95,7 +96,8 @@ export async function getEMA(symbol: string, window = 50, timespan = 'day'): Pro
       params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
       timeout: 10000,
     });
-    return res.data;
+    // return only the values array/object from the API response
+    return res.data?.results?.values ?? [];
   } catch (err: any) {
     if (err.response) {
       const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
@@ -130,7 +132,8 @@ export async function getMACD(
       },
       timeout: 10000,
     });
-    return res.data;
+    // return only the values array/object from the API response
+    return res.data?.results?.values ?? [];
   } catch (err: any) {
     if (err.response) {
       const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
@@ -151,7 +154,8 @@ export async function getRSI(symbol: string, window = 14, timespan = 'day'): Pro
       params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
       timeout: 10000,
     });
-    return res.data;
+    // return only the values array/object from the API response
+    return res.data?.results?.values ?? [];
   } catch (err: any) {
     if (err.response) {
       const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
