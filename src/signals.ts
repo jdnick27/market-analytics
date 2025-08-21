@@ -1,4 +1,13 @@
-import { getOpenClose, getSMA, getEMA, getMACD, getRSI, get52WeekHighLow } from './polygonClient';
+import {
+  getOpenClose,
+  getSMA,
+  getEMA,
+  getMACD,
+  getRSI,
+  get52WeekHighLow,
+  getShortInterest,
+  getShortVolume,
+} from './polygonClient';
 
 export interface IndicatorSignal {
   indicator: string;
@@ -22,13 +31,15 @@ function previousDay(): string {
 }
 
 export async function generateSignals(symbol: string, date = previousDay()): Promise<IndicatorSignal[]> {
-  const [oc, smaArr, emaArr, macdArr, rsiArr, hiLo] = await Promise.all([
+  const [oc, smaArr, emaArr, macdArr, rsiArr, hiLo, shortVol, shortInt] = await Promise.all([
     getOpenClose(symbol, date),
     getSMA(symbol),
     getEMA(symbol),
     getMACD(symbol),
     getRSI(symbol),
     get52WeekHighLow(symbol, date),
+    getShortVolume(symbol, date),
+    getShortInterest(symbol),
   ]);
 
   // oc is Polygon open-close response which has .close
@@ -90,6 +101,46 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
         signals.push({ indicator: '52W', value: price, signal: 'hold', score: 0 });
       }
     }
+  }
+
+  // Short interest signal
+  if (shortInt) {
+    const shortPercent =
+      typeof (shortInt as any).short_percent === 'number'
+        ? (shortInt as any).short_percent
+        : Number.isFinite((shortInt as any).short_interest) && Number.isFinite((shortInt as any).float)
+        ? ((shortInt as any).short_interest / (shortInt as any).float) * 100
+        : undefined;
+
+    if (typeof shortPercent === 'number') {
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = 0;
+      if (shortPercent > 20) {
+        signal = 'sell';
+        score = Math.min(100, Math.round(((shortPercent - 20) / 80) * 100));
+      } else if (shortPercent < 5) {
+        signal = 'buy';
+        score = Math.min(100, Math.round(((5 - shortPercent) / 5) * 100));
+      }
+      signals.push({ indicator: 'SHORT_INT', value: shortPercent, signal, score });
+    }
+  }
+
+  // Short volume signal
+  const shortVolVal = Number((shortVol as any)?.short_volume ?? (shortVol as any)?.shortVolume);
+  const totalVolVal = Number((shortVol as any)?.volume ?? (shortVol as any)?.total_volume);
+  if (Number.isFinite(shortVolVal) && Number.isFinite(totalVolVal) && totalVolVal > 0) {
+    const ratio = shortVolVal / totalVolVal;
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = 0;
+    if (ratio > 0.4) {
+      signal = 'sell';
+      score = Math.min(100, Math.round(((ratio - 0.4) / 0.6) * 100));
+    } else if (ratio < 0.2) {
+      signal = 'buy';
+      score = Math.min(100, Math.round(((0.2 - ratio) / 0.2) * 100));
+    }
+    signals.push({ indicator: 'SHORT_VOL', value: ratio, signal, score });
   }
 
   // EMA signal
