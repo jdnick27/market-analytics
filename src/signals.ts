@@ -1,4 +1,15 @@
-import { getOpenClose, getSMA, getEMA, getMACD, getRSI, get52WeekHighLow } from './polygonClient';
+import {
+  getOpenClose,
+  getSMA,
+  getEMA,
+  getMACD,
+  getRSI,
+  get52WeekHighLow,
+  getShortInterest,
+  getShortVolume,
+  getTicker,
+  getSharesOutstanding,
+} from './polygonClient';
 
 export interface IndicatorSignal {
   indicator: string;
@@ -22,13 +33,16 @@ function previousDay(): string {
 }
 
 export async function generateSignals(symbol: string, date = previousDay()): Promise<IndicatorSignal[]> {
-  const [oc, smaArr, emaArr, macdArr, rsiArr, hiLo] = await Promise.all([
+  const [oc, smaArr, emaArr, macdArr, rsiArr, hiLo, shortVol, shortInt, sharesOutstanding] = await Promise.all([
     getOpenClose(symbol, date),
     getSMA(symbol),
     getEMA(symbol),
     getMACD(symbol),
     getRSI(symbol),
     get52WeekHighLow(symbol, date),
+    getShortVolume(symbol, date),
+    getShortInterest(symbol),
+    getSharesOutstanding(symbol),
   ]);
 
   // oc is Polygon open-close response which has .close
@@ -90,6 +104,71 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
         signals.push({ indicator: '52W', value: price, signal: 'hold', score: 0 });
       }
     }
+  }
+
+  // Short interest signal
+  if (shortInt) {
+    const si = shortInt as any;
+    // short_percent will never be present per your note; compute from short_interest / sharesOutstanding
+    let shortPercent: number | undefined;
+    if (Number.isFinite(si.short_interest)) {
+      const shortInterestVal = Number(si.short_interest);
+      if (Number.isFinite((sharesOutstanding as any)) && Number(sharesOutstanding) > 0) {
+        shortPercent = (shortInterestVal / Number(sharesOutstanding)) * 100;
+      }
+      // If float is provided directly in SI, prefer that
+      else if (Number.isFinite(si.float) && si.float > 0) {
+        shortPercent = (shortInterestVal / Number(si.float)) * 100;
+      }
+    }
+
+    if (typeof shortPercent === 'number') {
+      // Use percentage-based thresholds when we have a true percent
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = 0;
+      if (shortPercent > 20) {
+        signal = 'sell';
+        score = Math.min(100, Math.round(((shortPercent - 20) / 80) * 100));
+      } else if (shortPercent < 5) {
+        signal = 'buy';
+        score = Math.min(100, Math.round(((5 - shortPercent) / 5) * 100));
+      }
+      signals.push({ indicator: 'SHORT_INT', value: shortPercent, signal, score });
+    } else if (Number.isFinite(si.days_to_cover)) {
+      // Fallback: many APIs return short_interest, avg_daily_volume and days_to_cover instead of a percent.
+      // Use days_to_cover as a liquidity-based heuristic: high days-to-cover -> bearish, low -> bullish.
+      const days = Number(si.days_to_cover);
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = 0;
+      if (days > 5) {
+        // heavy short interest relative to liquidity
+        signal = 'sell';
+        score = Math.min(100, Math.round(((days - 5) / 45) * 100)); // scale: 5..50 -> 0..100
+      } else if (days < 1) {
+        // very easy to cover shorts -> bullish
+        signal = 'buy';
+        score = Math.min(100, Math.round(((1 - days) / 1) * 100));
+      }
+      // store days_to_cover as the value when percent is not available
+      signals.push({ indicator: 'SHORT_INT', value: days, signal, score });
+    }
+  }
+
+  // Short volume signal
+  const shortVolVal = Number((shortVol as any)?.short_volume ?? (shortVol as any)?.shortVolume);
+  const totalVolVal = Number((shortVol as any)?.volume ?? (shortVol as any)?.total_volume);
+  if (Number.isFinite(shortVolVal) && Number.isFinite(totalVolVal) && totalVolVal > 0) {
+    const ratio = shortVolVal / totalVolVal;
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = 0;
+    if (ratio > 0.4) {
+      signal = 'sell';
+      score = Math.min(100, Math.round(((ratio - 0.4) / 0.6) * 100));
+    } else if (ratio < 0.2) {
+      signal = 'buy';
+      score = Math.min(100, Math.round(((0.2 - ratio) / 0.2) * 100));
+    }
+    signals.push({ indicator: 'SHORT_VOL', value: ratio, signal, score });
   }
 
   // EMA signal

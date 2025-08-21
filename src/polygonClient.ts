@@ -234,3 +234,84 @@ export async function get52WeekHighLow(symbol: string, toDate: string): Promise<
     throw err;
   }
 }
+
+// Short interest and short volume
+
+export async function getShortInterest(ticker: string): Promise<any> {
+  if (!ticker) throw new Error('ticker is required');
+  const apiKey = getApiKey();
+  // Polygon docs: https://polygon.io/docs/rest/stocks/fundamentals/short-interest
+  const url = `${BASE}/stocks/v1/short-interest`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, ticker },
+      timeout: 10000,
+    });
+    const results = res.data?.results;
+    return Array.isArray(results) ? results[0] ?? null : results ?? null;
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+export async function getShortVolume(ticker: string, date: string): Promise<any> {
+  if (!ticker) throw new Error('ticker is required');
+  if (!date) throw new Error('date is required (YYYY-MM-DD)');
+  const apiKey = getApiKey();
+  // Polygon docs: https://polygon.io/docs/rest/stocks/fundamentals/short-volume
+  const url = `${BASE}/stocks/v1/short-volume`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, ticker, date },
+      timeout: 10000,
+    });
+    const results = res.data?.results;
+    return Array.isArray(results) ? results[0] ?? null : results ?? null;
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Return shares outstanding for a ticker using the Polygon ticker overview endpoint.
+ * Returns a number (shares) or null if unavailable.
+ */
+export async function getSharesOutstanding(ticker: string): Promise<number | null> {
+  if (!ticker) throw new Error('ticker is required');
+  try {
+    const data = await getTicker(ticker);
+    // getTicker returns res.data which usually has a `results` object
+    const res = (data && (data.results ?? data)) as any;
+    if (!res) return null;
+
+    // Try common fields for shares outstanding
+    const candidates = [
+      res.shares_outstanding,
+      res.outstanding_shares,
+      res.share_class_shares_outstanding,
+      res.total_shares,
+    ];
+    for (const c of candidates) {
+      if (Number.isFinite(c) && Number(c) > 0) return Number(c);
+    }
+
+    // As a conservative fallback, some responses include marketcap; without a reliable
+    // price here we avoid guessing. Return null if no direct shares field present.
+    return null;
+  } catch (err) {
+    // bubble up network/API errors
+    throw err;
+  }
+}
