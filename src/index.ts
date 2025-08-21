@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { generateSignals, IndicatorSignal } from './signals';
 import { listTickers } from './polygonClient';
+import { postBestTickers } from './xBot';
 
 // tiny contract:
 // input: none – fetches an array of tickers from Polygon.io
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
     const sorted = results.slice().sort((a, b) => b.score - a.score);
     const bestTickers = sorted.filter((r) => r.score > 0);
     console.log('\nBest tickers to buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
+    await postBestTickers(bestTickers);
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;

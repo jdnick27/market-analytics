@@ -1,12 +1,18 @@
 # market-analytics — polygon.io example
 
-This small example shows how to fetch the last trade for a stock using Polygon.io and print it to the console.
+This small example shows how to fetch stock data from Polygon.io, generate indicator signals, and post the best tickers to X (Twitter).
 
 Setup
 
-1. Copy `.env` and add your Polygon API key:
+1. Copy `.env.example` to `.env` and add the required values:
 
-   POLYGON_API_KEY=your_real_key_here
+   ```
+   POLYGON_API_KEY=your_polygon_api_key_here
+   X_API_KEY=your_x_api_key_here
+   X_API_SECRET=your_x_api_secret_here
+   X_ACCESS_TOKEN=your_x_access_token_here
+   X_ACCESS_SECRET=your_x_access_secret_here
+   ```
 
 2. Install dependencies:
 
@@ -17,11 +23,8 @@ npm install
 Run
 
 ```bash
-# default uses AAPL
-npm start
-
-# or pass a symbol
-node src/index.js TSLA
+# default runs analysis and posts top tickers to X
+npm test
 ```
 
 Testing
