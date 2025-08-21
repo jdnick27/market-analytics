@@ -1,6 +1,14 @@
 import axios from 'axios';
+import http from 'http';
+import https from 'https';
 
 const BASE = 'https://api.polygon.io';
+
+// Configure global axios agents to reuse sockets and limit concurrent sockets.
+// This reduces the chance of `ECONNRESET` / "socket hang up" when the app
+// makes many parallel requests.
+axios.defaults.httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50 });
+axios.defaults.httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50 });
 
 // Global request timeout (ms) — set to 2 minutes
 export const REQUEST_TIMEOUT = 120000;
