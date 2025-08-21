@@ -62,3 +62,103 @@ export async function getOpenClose(symbol: string, date: string): Promise<any> {
     throw err;
   }
 }
+
+// Technical indicators
+
+export async function getSMA(symbol: string, window = 50, timespan = 'day'): Promise<any> {
+  if (!symbol) throw new Error('symbol is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/v1/indicators/sma/${encodeURIComponent(symbol)}`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
+      timeout: 10000,
+    });
+    return res.data;
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+export async function getEMA(symbol: string, window = 50, timespan = 'day'): Promise<any> {
+  if (!symbol) throw new Error('symbol is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/v1/indicators/ema/${encodeURIComponent(symbol)}`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
+      timeout: 10000,
+    });
+    return res.data;
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+export async function getMACD(
+  symbol: string,
+  shortWindow = 12,
+  longWindow = 26,
+  signalWindow = 9,
+  timespan = 'day',
+): Promise<any> {
+  if (!symbol) throw new Error('symbol is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/v1/indicators/macd/${encodeURIComponent(symbol)}`;
+  try {
+    const res = await axios.get(url, {
+      params: {
+        apiKey,
+        timespan,
+        short_window: shortWindow,
+        long_window: longWindow,
+        signal_window: signalWindow,
+        series_type: 'close',
+        limit: 1,
+      },
+      timeout: 10000,
+    });
+    return res.data;
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+export async function getRSI(symbol: string, window = 14, timespan = 'day'): Promise<any> {
+  if (!symbol) throw new Error('symbol is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/v1/indicators/rsi/${encodeURIComponent(symbol)}`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, timespan, window, series_type: 'close', limit: 1 },
+      timeout: 10000,
+    });
+    return res.data;
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
