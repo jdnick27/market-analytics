@@ -52,6 +52,16 @@ async function main(): Promise<void> {
     const sorted = results.slice().sort((a, b) => b.score - a.score);
     const bestTickers = sorted.filter((r) => r.score > 0);
     console.log('\nBest tickers to buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
+
+    // Create posts summarizing signals for the top 5 tickers to buy
+    const topFive = bestTickers.slice(0, 5);
+    const posts = topFive.map(({ symbol, signals, score }) => {
+      const summary = signals
+        .map((s) => `${s.indicator}: ${s.signal}`)
+        .join(', ');
+      return `${symbol} - ${summary}. Total score: ${score}`;
+    });
+    console.log('\nPosts:', posts);
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;
