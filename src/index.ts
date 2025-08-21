@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { getOpenClose } from './polygonClient';
+import { getOpenClose, getSMA, getEMA, getMACD, getRSI } from './polygonClient';
 
 // tiny contract:
 // input: symbol (string) via CLI arg or default 'AAPL'
@@ -23,8 +23,19 @@ async function main(): Promise<void> {
     const data = await getOpenClose(symbol, date);
     console.log('Open/Close summary:');
     console.dir(data, { depth: null });
+
+    const [sma, ema, macd, rsi] = await Promise.all([
+      getSMA(symbol),
+      getEMA(symbol),
+      getMACD(symbol),
+      getRSI(symbol),
+    ]);
+    console.log('SMA:', sma);
+    console.log('EMA:', ema);
+    console.log('MACD:', macd);
+    console.log('RSI:', rsi);
   } catch (err: any) {
-    console.error('Error fetching open/close:', err?.message || err);
+    console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;
   }
 }
