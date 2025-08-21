@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { generateSignals, IndicatorSignal } from './signals';
+import { listTickers } from './polygonClient';
 
 // tiny contract:
-// input: none – uses a fixed array of tickers
+// input: none – fetches an array of tickers from Polygon.io
 // output: prints indicator signals for each ticker and
 //         lists the best tickers to buy based on aggregated scores
 
@@ -24,7 +25,11 @@ function aggregateSignalScore(signals: IndicatorSignal[]): number {
 }
 
 async function main(): Promise<void> {
-  const tickers = ['AAPL', 'MSFT', 'GOOGL'];
+  const tickers = ['NVDA','MSFT','BCH','AMZN','TLK','KOF','AVGO','FMX','AMX','HSBC',
+ 'TSLA','WMT','JPM','TV','CMS','PDD','LLY','V','ORCL','HDB',
+ 'BP','MA','NFLX','XOM','COST','JNJ','NTES','HD','CX','PLTR',
+ 'PG','EC','ABBV','BAC','CHT','NGG','SAP','CVX','KO','TMUS',
+ 'ASML','BCS','VOD','UNH','BHP','AMD','LYG','CSCO','PM','DEO'];
   const date = previousDay();
   console.log(`Generating signals for ${tickers.join(', ')} on ${date}`);
   try {
