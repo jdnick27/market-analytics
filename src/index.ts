@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { getOpenClose } from './polygonClient';
+import { getOpenClose, listTickers } from './polygonClient';
 import { generateSignals } from './signals';
 
 // tiny contract:
@@ -17,16 +17,19 @@ function previousDay(): string {
 }
 
 async function main(): Promise<void> {
-  const symbol = 'AAPL';
   const date = previousDay();
-  console.log(`Fetching open/close for: ${symbol} on ${date}`);
+  console.log(`Fetching tickers and market data for ${date}`);
   try {
-    const data = await getOpenClose(symbol, date);
-    console.log('Open/Close summary:');
-    console.dir(data, { depth: null });
+    const tickers = await listTickers(5, { market: 'stocks', active: true });
+    console.log('Tickers:', tickers);
+    for (const symbol of tickers) {
+      const data = await getOpenClose(symbol, date);
+      console.log(`Open/Close summary for ${symbol}:`);
+      console.dir(data, { depth: null });
 
-    const signals = await generateSignals(symbol, date);
-    console.log('Signals:', signals);
+      const signals = await generateSignals(symbol, date);
+      console.log(`Signals for ${symbol}:`, signals);
+    }
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;
