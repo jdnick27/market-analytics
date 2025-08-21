@@ -1,4 +1,4 @@
-import { getOpenClose, getSMA, getEMA, getMACD, getRSI } from './polygonClient';
+import { getSMA, getEMA, getMACD, getRSI } from './polygonClient';
 
 export interface IndicatorSignal {
   indicator: string;
@@ -6,25 +6,13 @@ export interface IndicatorSignal {
   score: number; // 0 (neutral) to 100 (strong)
 }
 
-function previousDay(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-export async function generateSignals(symbol: string, date = previousDay()): Promise<IndicatorSignal[]> {
-  const [oc, smaArr, emaArr, macdArr, rsiArr] = await Promise.all([
-    getOpenClose(symbol, date),
+export async function generateSignals(symbol: string, price: number): Promise<IndicatorSignal[]> {
+  const [smaArr, emaArr, macdArr, rsiArr] = await Promise.all([
     getSMA(symbol),
     getEMA(symbol),
     getMACD(symbol),
     getRSI(symbol),
   ]);
-
-  const price: number | undefined = oc?.close;
   const signals: IndicatorSignal[] = [];
 
   const rsiValue = rsiArr?.[0]?.value;

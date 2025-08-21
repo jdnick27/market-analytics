@@ -1,32 +1,37 @@
 import 'dotenv/config';
-import { getOpenClose } from './polygonClient';
+import { getSnapshots } from './polygonClient';
 import { generateSignals } from './signals';
 
 // tiny contract:
-// input: symbol (string) via CLI arg or default 'AAPL'
-// optional date (YYYY-MM-DD) via second arg; defaults to today
-// output: prints the daily open/close summary to console
-
-function previousDay(): string {
-    const d = new Date();
-    d.setDate(d.getDate() - 1); // previous local day
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
+// input: comma-separated symbols via CLI arg or default 'AAPL'
+// output: prints the full market snapshot and signals for each symbol
 
 async function main(): Promise<void> {
-  const symbol = 'AAPL';
-  const date = previousDay();
-  console.log(`Fetching open/close for: ${symbol} on ${date}`);
+  const tickersArg = process.argv[2] || 'AAPL';
+  const tickers = tickersArg.split(',').map((t) => t.trim()).filter(Boolean);
+  console.log(`Fetching snapshots for: ${tickers.join(', ')}`);
   try {
-    const data = await getOpenClose(symbol, date);
-    console.log('Open/Close summary:');
-    console.dir(data, { depth: null });
+    const snapshots = await getSnapshots(tickers);
+    const snapshotMap = new Map(snapshots.map((s: any) => [s.ticker, s]));
 
-    const signals = await generateSignals(symbol, date);
-    console.log('Signals:', signals);
+    await Promise.all(
+      tickers.map(async (sym) => {
+        const snap = snapshotMap.get(sym);
+        if (!snap) {
+          console.warn(`No snapshot found for ${sym}`);
+          return;
+        }
+        console.log(`Snapshot for ${sym}:`);
+        console.dir(snap, { depth: null });
+        const price = snap?.day?.c ?? snap?.lastTrade?.p;
+        if (typeof price !== 'number') {
+          console.warn(`No price available for ${sym}`);
+          return;
+        }
+        const signals = await generateSignals(sym, price);
+        console.log(`Signals for ${sym}:`, signals);
+      }),
+    );
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;

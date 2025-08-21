@@ -63,6 +63,27 @@ export async function getOpenClose(symbol: string, date: string): Promise<any> {
   }
 }
 
+export async function getSnapshots(tickers: string[]): Promise<any[]> {
+  if (!tickers || tickers.length === 0) throw new Error('tickers array is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/v2/snapshot/locale/us/markets/stocks/tickers`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, tickers: tickers.join(',') },
+      timeout: 10000,
+    });
+    return res.data?.tickers ?? [];
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
 // Technical indicators
 
 export async function getSMA(symbol: string, window = 50, timespan = 'day'): Promise<any> {
