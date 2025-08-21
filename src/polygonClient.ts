@@ -8,6 +8,26 @@ function getApiKey(): string {
   return k;
 }
 
+export async function listTickers(limit = 3): Promise<string[]> {
+  const apiKey = getApiKey();
+  const url = `${BASE}/v3/reference/tickers`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, market: 'stocks', active: true, limit },
+      timeout: 10000,
+    });
+    return res.data?.results?.map((t: any) => t.ticker) ?? [];
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
 export async function getTicker(ticker: string): Promise<any> {
   if (!ticker) throw new Error('ticker is required');
   const apiKey = getApiKey();
