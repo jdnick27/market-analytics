@@ -283,3 +283,35 @@ export async function getShortVolume(ticker: string, date: string): Promise<any>
     throw err;
   }
 }
+
+/**
+ * Return shares outstanding for a ticker using the Polygon ticker overview endpoint.
+ * Returns a number (shares) or null if unavailable.
+ */
+export async function getSharesOutstanding(ticker: string): Promise<number | null> {
+  if (!ticker) throw new Error('ticker is required');
+  try {
+    const data = await getTicker(ticker);
+    // getTicker returns res.data which usually has a `results` object
+    const res = (data && (data.results ?? data)) as any;
+    if (!res) return null;
+
+    // Try common fields for shares outstanding
+    const candidates = [
+      res.shares_outstanding,
+      res.outstanding_shares,
+      res.share_class_shares_outstanding,
+      res.total_shares,
+    ];
+    for (const c of candidates) {
+      if (Number.isFinite(c) && Number(c) > 0) return Number(c);
+    }
+
+    // As a conservative fallback, some responses include marketcap; without a reliable
+    // price here we avoid guessing. Return null if no direct shares field present.
+    return null;
+  } catch (err) {
+    // bubble up network/API errors
+    throw err;
+  }
+}

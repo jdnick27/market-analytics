@@ -29,7 +29,10 @@ async function main(): Promise<void> {
  'TSLA','WMT','JPM','TV','CMS','PDD','LLY','V','ORCL','HDB',
  'BP','MA','NFLX','XOM','COST','JNJ','NTES','HD','CX','PLTR',
  'PG','EC','ABBV','BAC','CHT','NGG','SAP','CVX','KO','TMUS',
- 'ASML','BCS','VOD','UNH','BHP','AMD','LYG','CSCO','PM','DEO'];
+ 'ASML','BCS','VOD','UNH','BHP','AMD','LYG','CSCO','PM','DEO',
+ 'AMC', 'GME', 'HITI', 'RKLB', 'BULL', 'APLD', 'EOSE', 'UROY',
+ 'COIN', 'BKNG', 'SMR', 'BABA', 'AMD', 'IBM', 'HYMC', 'INTC',
+ 'CRON', 'TLRY', 'CGC', 'ACB', 'SNDL', 'CRM', 'TSM'];
   const date = previousDay();
   console.log(`Generating signals for ${tickers.join(', ')} on ${date}`);
   try {

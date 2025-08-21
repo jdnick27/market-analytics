@@ -7,6 +7,8 @@ import {
   get52WeekHighLow,
   getShortInterest,
   getShortVolume,
+  getTicker,
+  getSharesOutstanding,
 } from './polygonClient';
 
 export interface IndicatorSignal {
@@ -31,7 +33,7 @@ function previousDay(): string {
 }
 
 export async function generateSignals(symbol: string, date = previousDay()): Promise<IndicatorSignal[]> {
-  const [oc, smaArr, emaArr, macdArr, rsiArr, hiLo, shortVol, shortInt] = await Promise.all([
+  const [oc, smaArr, emaArr, macdArr, rsiArr, hiLo, shortVol, shortInt, sharesOutstanding] = await Promise.all([
     getOpenClose(symbol, date),
     getSMA(symbol),
     getEMA(symbol),
@@ -40,6 +42,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     get52WeekHighLow(symbol, date),
     getShortVolume(symbol, date),
     getShortInterest(symbol),
+    getSharesOutstanding(symbol),
   ]);
 
   // oc is Polygon open-close response which has .close
@@ -105,14 +108,22 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
 
   // Short interest signal
   if (shortInt) {
-    const shortPercent =
-      typeof (shortInt as any).short_percent === 'number'
-        ? (shortInt as any).short_percent
-        : Number.isFinite((shortInt as any).short_interest) && Number.isFinite((shortInt as any).float)
-        ? ((shortInt as any).short_interest / (shortInt as any).float) * 100
-        : undefined;
+    const si = shortInt as any;
+    // short_percent will never be present per your note; compute from short_interest / sharesOutstanding
+    let shortPercent: number | undefined;
+    if (Number.isFinite(si.short_interest)) {
+      const shortInterestVal = Number(si.short_interest);
+      if (Number.isFinite((sharesOutstanding as any)) && Number(sharesOutstanding) > 0) {
+        shortPercent = (shortInterestVal / Number(sharesOutstanding)) * 100;
+      }
+      // If float is provided directly in SI, prefer that
+      else if (Number.isFinite(si.float) && si.float > 0) {
+        shortPercent = (shortInterestVal / Number(si.float)) * 100;
+      }
+    }
 
     if (typeof shortPercent === 'number') {
+      // Use percentage-based thresholds when we have a true percent
       let signal: 'buy' | 'sell' | 'hold' = 'hold';
       let score = 0;
       if (shortPercent > 20) {
@@ -123,6 +134,23 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
         score = Math.min(100, Math.round(((5 - shortPercent) / 5) * 100));
       }
       signals.push({ indicator: 'SHORT_INT', value: shortPercent, signal, score });
+    } else if (Number.isFinite(si.days_to_cover)) {
+      // Fallback: many APIs return short_interest, avg_daily_volume and days_to_cover instead of a percent.
+      // Use days_to_cover as a liquidity-based heuristic: high days-to-cover -> bearish, low -> bullish.
+      const days = Number(si.days_to_cover);
+      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      let score = 0;
+      if (days > 5) {
+        // heavy short interest relative to liquidity
+        signal = 'sell';
+        score = Math.min(100, Math.round(((days - 5) / 45) * 100)); // scale: 5..50 -> 0..100
+      } else if (days < 1) {
+        // very easy to cover shorts -> bullish
+        signal = 'buy';
+        score = Math.min(100, Math.round(((1 - days) / 1) * 100));
+      }
+      // store days_to_cover as the value when percent is not available
+      signals.push({ indicator: 'SHORT_INT', value: days, signal, score });
     }
   }
 
