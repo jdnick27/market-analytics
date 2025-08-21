@@ -7,9 +7,8 @@ import {
   get52WeekHighLow,
   getShortInterest,
   getShortVolume,
-  getTicker,
   getSharesOutstanding,
-  getFinancials,
+  getFinancialsHistory,
 } from './polygonClient';
 
 export interface IndicatorSignal {
@@ -33,6 +32,48 @@ function previousDay(): string {
   return `${y}-${m}-${day}`;
 }
 
+function getNested(obj: any, path: string[]): any {
+  return path.reduce((o, k) => (o && o[k] !== undefined ? o[k] : undefined), obj);
+}
+
+function computeGrowth(results: any[], path: string[]): number | undefined {
+  if (!Array.isArray(results) || results.length < 2) return undefined;
+  const values = results
+    .map((r) => {
+      const v = getNested(r, path);
+      return typeof v === 'object' && v !== null && 'value' in v ? (v as any).value : v;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  if (values.length < 2) return undefined;
+  const latest = values[0];
+  const oldest = values[values.length - 1];
+  if (oldest === 0) return undefined;
+  return (latest - oldest) / Math.abs(oldest);
+}
+
+function computeGrowthFromValues(values: number[]): number | undefined {
+  if (values.length < 2) return undefined;
+  const latest = values[0];
+  const oldest = values[values.length - 1];
+  if (oldest === 0) return undefined;
+  return (latest - oldest) / Math.abs(oldest);
+}
+
+function extractShares(result: any): number | undefined {
+  const paths = [
+    ['financials', 'balance_sheet', 'common_stock_shares_outstanding', 'value'],
+    ['financials', 'income_statement', 'weighted_average_shares_outstanding_basic', 'value'],
+    ['financials', 'income_statement', 'weighted_average_shares_outstanding_diluted', 'value'],
+    ['shares_outstanding', 'value'],
+    ['shares_outstanding'],
+  ];
+  for (const p of paths) {
+    const v = getNested(result, p);
+    if (Number.isFinite(v)) return Number(v);
+  }
+  return undefined;
+}
+
 export async function generateSignals(symbol: string, date = previousDay()): Promise<IndicatorSignal[]> {
   const [
     oc,
@@ -44,7 +85,8 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     shortVol,
     shortInt,
     sharesOutstanding,
-    fin,
+    finQ,
+    finA,
   ] = await Promise.all([
     getOpenClose(symbol, date),
     getSMA(symbol),
@@ -55,7 +97,8 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     getShortVolume(symbol, date),
     getShortInterest(symbol),
     getSharesOutstanding(symbol),
-    getFinancials(symbol),
+    getFinancialsHistory(symbol, 'quarterly', 10),
+    getFinancialsHistory(symbol, 'annual', 10),
   ]);
 
   // oc is Polygon open-close response which has .close
@@ -314,8 +357,9 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   }
 
   // Fundamental financial signals
-  if (fin && fin.financials) {
-    const fs = fin.financials;
+  const latestFin = Array.isArray(finQ) && finQ.length > 0 ? finQ[0] : null;
+  if (latestFin && latestFin.financials) {
+    const fs = latestFin.financials;
 
     // Current ratio: current assets / current liabilities
     const ca = fs.balance_sheet?.current_assets?.value;
@@ -412,6 +456,109 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
       }
       signals.push({ indicator: 'Comprehensive Income', value: compInc, signal, score });
     }
+  }
+
+  // Growth signals from historical filings
+  const revGrowthQ = computeGrowth(finQ, ['financials', 'income_statement', 'revenues', 'value']);
+  if (typeof revGrowthQ === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(revGrowthQ) * 100));
+    if (revGrowthQ > 0.05) {
+      signal = 'buy';
+    } else if (revGrowthQ < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'Revenue Growth (Q)', value: revGrowthQ, signal, score });
+  }
+
+  const revGrowthA = computeGrowth(finA, ['financials', 'income_statement', 'revenues', 'value']);
+  if (typeof revGrowthA === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(revGrowthA) * 100));
+    if (revGrowthA > 0.05) {
+      signal = 'buy';
+    } else if (revGrowthA < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'Revenue Growth (Y)', value: revGrowthA, signal, score });
+  }
+
+  const netGrowthQ = computeGrowth(finQ, ['financials', 'income_statement', 'net_income_loss', 'value']);
+  if (typeof netGrowthQ === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(netGrowthQ) * 100));
+    if (netGrowthQ > 0.05) {
+      signal = 'buy';
+    } else if (netGrowthQ < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'Net Income Growth (Q)', value: netGrowthQ, signal, score });
+  }
+
+  const netGrowthA = computeGrowth(finA, ['financials', 'income_statement', 'net_income_loss', 'value']);
+  if (typeof netGrowthA === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(netGrowthA) * 100));
+    if (netGrowthA > 0.05) {
+      signal = 'buy';
+    } else if (netGrowthA < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'Net Income Growth (Y)', value: netGrowthA, signal, score });
+  }
+
+  const cashGrowthQ = computeGrowth(finQ, ['financials', 'cash_flow_statement', 'net_cash_flow_from_operating_activities', 'value']);
+  if (typeof cashGrowthQ === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(cashGrowthQ) * 100));
+    if (cashGrowthQ > 0.05) {
+      signal = 'buy';
+    } else if (cashGrowthQ < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'Op Cash Flow Growth (Q)', value: cashGrowthQ, signal, score });
+  }
+
+  const cashGrowthA = computeGrowth(finA, ['financials', 'cash_flow_statement', 'net_cash_flow_from_operating_activities', 'value']);
+  if (typeof cashGrowthA === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(cashGrowthA) * 100));
+    if (cashGrowthA > 0.05) {
+      signal = 'buy';
+    } else if (cashGrowthA < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'Op Cash Flow Growth (Y)', value: cashGrowthA, signal, score });
+  }
+
+  // Share dilution check using shares outstanding
+  const sharesVals = finQ
+    .map((r: any) => extractShares(r))
+    .filter((v): v is number => Number.isFinite(v));
+  const sharesGrowth = computeGrowthFromValues(sharesVals);
+  if (typeof sharesGrowth === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(sharesGrowth) * 100));
+    if (sharesGrowth > 0.05) {
+      signal = 'sell';
+    } else if (sharesGrowth < -0.05) {
+      signal = 'buy';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'Share Dilution', value: sharesGrowth, signal, score });
   }
 
   return signals;
