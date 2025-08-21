@@ -315,3 +315,66 @@ export async function getSharesOutstanding(ticker: string): Promise<number | nul
     throw err;
   }
 }
+
+// Financial statements
+
+/**
+ * Fetch the latest financials for a given ticker.
+ * Docs: https://polygon.io/docs/rest/stocks/fundamentals/financials
+ * Returns the first result object or null if none.
+ */
+export async function getFinancials(ticker: string): Promise<any> {
+  if (!ticker) throw new Error('ticker is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/vX/reference/financials`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, ticker, limit: 1 },
+      timeout: 10000,
+    });
+    const results = res.data?.results;
+    return Array.isArray(results) ? results[0] ?? null : results ?? null;
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Fetch a history of financial filings for a ticker.
+ * @param ticker Stock ticker symbol.
+ * @param timeframe 'quarterly' or 'annual'.
+ * @param limit Number of filings to retrieve (max 10 by default).
+ * Returns an array of filing objects sorted by end_date descending.
+ */
+export async function getFinancialsHistory(
+  ticker: string,
+  timeframe: 'quarterly' | 'annual',
+  limit = 10,
+): Promise<any[]> {
+  if (!ticker) throw new Error('ticker is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/vX/reference/financials`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, ticker, timeframe, limit },
+      timeout: 10000,
+    });
+    const results: any[] = Array.isArray(res.data?.results) ? res.data.results : [];
+    // Sort by end_date descending so index 0 is the most recent filing
+    return results.sort((a, b) => new Date(b.end_date).getTime() - new Date(a.end_date).getTime());
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}

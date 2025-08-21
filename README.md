@@ -24,6 +24,13 @@ npm start
 node src/index.js TSLA
 ```
 
+Testing
+
+```bash
+# requires POLYGON_API_KEY in your environment or .env file
+npm test
+```
+
 Notes
 
 - The `.env` file is ignored by `.gitignore`.
