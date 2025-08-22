@@ -23,6 +23,12 @@ export interface IndicatorSignal {
   score: number; // 0 (neutral) to 100 (strong)
 }
 
+export interface GenerateSignalsResult {
+  price?: number;
+  projectedPrice?: number;
+  signals: IndicatorSignal[];
+}
+
 function previousDay(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -84,7 +90,7 @@ function extractShares(result: any): number | undefined {
   return undefined;
 }
 
-export async function generateSignals(symbol: string, date = previousDay()): Promise<IndicatorSignal[]> {
+export async function generateSignals(symbol: string, date = previousDay()): Promise<GenerateSignalsResult> {
   const [
     oc,
     smaArr,
@@ -114,6 +120,16 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   // oc is Polygon open-close response which has .close
   const price: number | undefined = oc?.close;
   const signals: IndicatorSignal[] = [];
+
+  // Daily momentum signal using the day's open and close
+  const openPrice: number | undefined = oc?.open;
+  if (typeof openPrice === 'number' && typeof price === 'number') {
+    const changePerc = ((price - openPrice) / openPrice) * 100;
+    const score = Math.min(100, Math.round(Math.abs(changePerc)));
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    if (Math.abs(changePerc) >= 0.1) signal = changePerc > 0 ? 'buy' : 'sell';
+    signals.push({ indicator: 'Daily Momentum', value: changePerc, signal, score });
+  }
 
   const sharesFor = (r: any, fallback = true): number | undefined =>
     extractShares(r) ??
@@ -859,6 +875,16 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     });
   }
 
-  return signals;
+  // Projected price derived from aggregate signal score
+  const netScore = signals.reduce((total, s) => {
+    if (s.signal === 'buy') return total + s.score;
+    if (s.signal === 'sell') return total - s.score;
+    return total;
+  }, 0);
+  const normalized = signals.length ? netScore / (signals.length * 100) : 0;
+  const projectedPrice =
+    typeof price === 'number' ? price * (1 + normalized * 0.2) : undefined;
+
+  return { price, projectedPrice, signals };
 }
 
