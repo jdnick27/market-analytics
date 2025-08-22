@@ -525,12 +525,16 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
       if (typeof price === 'number') {
         let signal: 'buy' | 'sell' | 'hold' = 'hold';
         let score = 0;
-        if (price < bps) {
+        if (bps <= 0) {
+          // negative book value is a strong bearish signal
+          signal = 'sell';
+          score = 100;
+        } else if (price < bps) {
           signal = 'buy';
           score = Math.min(100, Math.round(((bps - price) / bps) * 100));
         } else if (price > bps * 2) {
           signal = 'sell';
-          score = Math.min(100, Math.round(((price / bps - 2) / 2) * 100));
+          score = Math.min(100, Math.round(Math.abs((price / bps - 2) / 2) * 100));
         }
         signals.push({ indicator: 'Book Value Per Share', value: bps, signal, score });
       } else {
