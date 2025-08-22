@@ -69,16 +69,46 @@ async function main(): Promise<void> {
     console.log('\nTop Stocks to Buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
     console.log('Top Stocks to Sell:', worstTickers.map((r) => `${r.symbol} (${r.score})`));
 
-    const topProjected = results
+    const withChange = results
       .filter(
-        (r): r is (typeof results)[number] & { projectedPrice: number } =>
-          typeof r.projectedPrice === 'number'
+        (r): r is (typeof results)[number] & {
+          price: number;
+          projectedPrice: number;
+        } => typeof r.price === 'number' && typeof r.projectedPrice === 'number'
       )
-      .sort((a, b) => b.projectedPrice - a.projectedPrice)
+      .map((r) => ({
+        ...r,
+        changePercent: ((r.projectedPrice - r.price) / r.price) * 100,
+      }));
+
+    const topIncreases = withChange
+      .filter((r) => r.changePercent > 0)
+      .sort((a, b) => b.changePercent - a.changePercent)
       .slice(0, 10);
+
+    const topDecreases = withChange
+      .filter((r) => r.changePercent < 0)
+      .sort((a, b) => a.changePercent - b.changePercent)
+      .slice(0, 10);
+
     console.log(
-      '\nTop 10 Highest Projected Prices:',
-      topProjected.map((r) => `${r.symbol} (${r.projectedPrice.toFixed(2)})`)
+      '\nTop 10 Highest Price Increases:',
+      topIncreases.map(
+        (r) =>
+          `${r.symbol} (current: ${r.price.toFixed(2)}, projected: ${r.projectedPrice.toFixed(
+            2
+          )}, change: ${r.changePercent.toFixed(2)}%)`
+      )
+    );
+
+    console.log(
+      'Top 10 Highest Price Decreases:',
+      topDecreases.map(
+        (r) =>
+          `${r.symbol} (current: ${r.price.toFixed(2)}, projected: ${r.projectedPrice.toFixed(
+            2
+          )}, change: ${r.changePercent.toFixed(2)}%)`
+      )
     );
 
     // Create posts summarizing signals for the top 5 stocks to buy
