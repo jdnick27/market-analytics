@@ -661,6 +661,177 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     signals.push({ indicator: 'Share Dilution', value: sharesGrowth, signal, score });
   }
 
+  // EPS growth
+  const epsValuesQ = finQ
+    .map((r: any) => {
+      const net = r.financials?.income_statement?.net_income_loss?.value;
+      const shares = extractShares(r);
+      return typeof net === 'number' && typeof shares === 'number' && shares > 0
+        ? net / shares
+        : undefined;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  const epsGrowthQ = computeGrowthFromValues(epsValuesQ);
+  if (typeof epsGrowthQ === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(epsGrowthQ) * 100));
+    if (epsGrowthQ > 0.05) {
+      signal = 'buy';
+    } else if (epsGrowthQ < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'EPS Growth (Q)', value: epsGrowthQ, signal, score });
+  }
+
+  const epsValuesA = finA
+    .map((r: any) => {
+      const net = r.financials?.income_statement?.net_income_loss?.value;
+      const shares = extractShares(r);
+      return typeof net === 'number' && typeof shares === 'number' && shares > 0
+        ? net / shares
+        : undefined;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  const epsGrowthA = computeGrowthFromValues(epsValuesA);
+  if (typeof epsGrowthA === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(epsGrowthA) * 100));
+    if (epsGrowthA > 0.05) {
+      signal = 'buy';
+    } else if (epsGrowthA < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({ indicator: 'EPS Growth (Y)', value: epsGrowthA, signal, score });
+  }
+
+  // Revenue per share growth
+  const revPerShareQ = finQ
+    .map((r: any) => {
+      const revenue =
+        r.financials?.income_statement?.net_sales?.value ??
+        r.financials?.income_statement?.revenues?.value;
+      const shares = extractShares(r);
+      return typeof revenue === 'number' && typeof shares === 'number' && shares > 0
+        ? revenue / shares
+        : undefined;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  const revPSGrowthQ = computeGrowthFromValues(revPerShareQ);
+  if (typeof revPSGrowthQ === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(revPSGrowthQ) * 100));
+    if (revPSGrowthQ > 0.05) {
+      signal = 'buy';
+    } else if (revPSGrowthQ < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({
+      indicator: 'Revenue Per Share Growth (Q)',
+      value: revPSGrowthQ,
+      signal,
+      score,
+    });
+  }
+
+  const revPerShareA = finA
+    .map((r: any) => {
+      const revenue =
+        r.financials?.income_statement?.net_sales?.value ??
+        r.financials?.income_statement?.revenues?.value;
+      const shares = extractShares(r);
+      return typeof revenue === 'number' && typeof shares === 'number' && shares > 0
+        ? revenue / shares
+        : undefined;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  const revPSGrowthA = computeGrowthFromValues(revPerShareA);
+  if (typeof revPSGrowthA === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(revPSGrowthA) * 100));
+    if (revPSGrowthA > 0.05) {
+      signal = 'buy';
+    } else if (revPSGrowthA < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({
+      indicator: 'Revenue Per Share Growth (Y)',
+      value: revPSGrowthA,
+      signal,
+      score,
+    });
+  }
+
+  // Book value per share growth
+  const bpsValuesQ = finQ
+    .map((r: any) => {
+      const equity =
+        r.financials?.balance_sheet?.equity?.value ??
+        r.financials?.balance_sheet?.stockholders_equity?.value ??
+        r.financials?.balance_sheet?.total_stockholders_equity?.value;
+      const shares = extractShares(r);
+      return typeof equity === 'number' && typeof shares === 'number' && shares > 0
+        ? equity / shares
+        : undefined;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  const bpsGrowthQ = computeGrowthFromValues(bpsValuesQ);
+  if (typeof bpsGrowthQ === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(bpsGrowthQ) * 100));
+    if (bpsGrowthQ > 0.05) {
+      signal = 'buy';
+    } else if (bpsGrowthQ < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({
+      indicator: 'Book Value Per Share Growth (Q)',
+      value: bpsGrowthQ,
+      signal,
+      score,
+    });
+  }
+
+  const bpsValuesA = finA
+    .map((r: any) => {
+      const equity =
+        r.financials?.balance_sheet?.equity?.value ??
+        r.financials?.balance_sheet?.stockholders_equity?.value ??
+        r.financials?.balance_sheet?.total_stockholders_equity?.value;
+      const shares = extractShares(r);
+      return typeof equity === 'number' && typeof shares === 'number' && shares > 0
+        ? equity / shares
+        : undefined;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  const bpsGrowthA = computeGrowthFromValues(bpsValuesA);
+  if (typeof bpsGrowthA === 'number') {
+    let signal: 'buy' | 'sell' | 'hold' = 'hold';
+    let score = Math.min(100, Math.round(Math.abs(bpsGrowthA) * 100));
+    if (bpsGrowthA > 0.05) {
+      signal = 'buy';
+    } else if (bpsGrowthA < -0.05) {
+      signal = 'sell';
+    } else {
+      score = 0;
+    }
+    signals.push({
+      indicator: 'Book Value Per Share Growth (Y)',
+      value: bpsGrowthA,
+      signal,
+      score,
+    });
+  }
+
   return signals;
 }
 
