@@ -50,14 +50,17 @@ async function main(): Promise<void> {
 
     const BATCH_SIZE = 5;
     const results = await mapBatched(tickers, BATCH_SIZE, async (symbol) => {
-      const signals = await generateSignals(symbol, date);
+      const { price, projectedPrice, signals } = await generateSignals(symbol, date);
       const score = aggregateSignalScore(signals);
-      return { symbol, signals, score };
+      return { symbol, price, projectedPrice, signals, score };
     });
 
-    results.forEach(({ symbol, signals, score }) => {
+    results.forEach(({ symbol, price, projectedPrice, signals, score }) => {
       console.log(`\n${symbol} signals:`, signals);
       console.log(`Total score: ${score}`);
+      if (typeof price === 'number' && typeof projectedPrice === 'number') {
+        console.log(`Projected Price: ${projectedPrice.toFixed(2)} (current: ${price.toFixed(2)})`);
+      }
     });
 
     const sorted = results.slice().sort((a, b) => b.score - a.score);
