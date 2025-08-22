@@ -360,6 +360,8 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   const latestFin = Array.isArray(finQ) && finQ.length > 0 ? finQ[0] : null;
   if (latestFin && latestFin.financials) {
     const fs = latestFin.financials;
+    const shares =
+      extractShares(latestFin) ?? (typeof sharesOutstanding === 'number' ? sharesOutstanding : undefined);
 
     // Current ratio: current assets / current liabilities
     const ca = fs.balance_sheet?.current_assets?.value;
@@ -440,6 +442,100 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
         score = 0;
       }
       signals.push({ indicator: 'Net Cash Flow', value: netCash, signal, score });
+    }
+
+    // Price/Earnings ratio
+    if (
+      typeof price === 'number' &&
+      typeof net === 'number' &&
+      typeof shares === 'number' &&
+      shares > 0
+    ) {
+      const eps = net / shares;
+      if (eps !== 0) {
+        const pe = price / eps;
+        let signal: 'buy' | 'sell' | 'hold' = 'hold';
+        let score = 0;
+        if (pe > 30 || pe < 0) {
+          signal = 'sell';
+          score = Math.min(100, Math.round((Math.abs(pe - 30) / 30) * 100));
+        } else if (pe < 15) {
+          signal = 'buy';
+          score = Math.min(100, Math.round(((15 - pe) / 15) * 100));
+        }
+        signals.push({ indicator: 'Price/Earnings', value: pe, signal, score });
+      }
+    }
+
+    // Price/Sales ratio
+    const sales = fs.income_statement?.net_sales?.value ?? fs.income_statement?.revenues?.value;
+    if (
+      typeof price === 'number' &&
+      typeof sales === 'number' &&
+      typeof shares === 'number' &&
+      shares > 0
+    ) {
+      const sps = sales / shares; // sales per share
+      if (sps !== 0) {
+        const ps = price / sps;
+        let signal: 'buy' | 'sell' | 'hold' = 'hold';
+        let score = 0;
+        if (ps > 3) {
+          signal = 'sell';
+          score = Math.min(100, Math.round(((ps - 3) / 3) * 100));
+        } else if (ps < 1) {
+          signal = 'buy';
+          score = Math.min(100, Math.round(((1 - ps) / 1) * 100));
+        }
+        signals.push({ indicator: 'Price/Sales', value: ps, signal, score });
+      }
+    }
+
+    // Price/Revenue ratio
+    const revenue = fs.income_statement?.revenues?.value;
+    if (
+      typeof price === 'number' &&
+      typeof revenue === 'number' &&
+      typeof shares === 'number' &&
+      shares > 0
+    ) {
+      const rps = revenue / shares; // revenue per share
+      if (rps !== 0) {
+        const pr = price / rps;
+        let signal: 'buy' | 'sell' | 'hold' = 'hold';
+        let score = 0;
+        if (pr > 3) {
+          signal = 'sell';
+          score = Math.min(100, Math.round(((pr - 3) / 3) * 100));
+        } else if (pr < 1) {
+          signal = 'buy';
+          score = Math.min(100, Math.round(((1 - pr) / 1) * 100));
+        }
+        signals.push({ indicator: 'Price/Revenue', value: pr, signal, score });
+      }
+    }
+
+    // Book value per share
+    const equity =
+      fs.balance_sheet?.equity?.value ??
+      fs.balance_sheet?.stockholders_equity?.value ??
+      fs.balance_sheet?.total_stockholders_equity?.value;
+    if (typeof equity === 'number' && typeof shares === 'number' && shares > 0) {
+      const bps = equity / shares;
+      if (typeof price === 'number') {
+        let signal: 'buy' | 'sell' | 'hold' = 'hold';
+        let score = 0;
+        if (price < bps) {
+          signal = 'buy';
+          score = Math.min(100, Math.round(((bps - price) / bps) * 100));
+        } else if (price > bps * 2) {
+          signal = 'sell';
+          score = Math.min(100, Math.round(((price / bps - 2) / 2) * 100));
+        }
+        signals.push({ indicator: 'Book Value Per Share', value: bps, signal, score });
+      } else {
+        signals.push({ indicator: 'Book Value Per Share', value: bps, signal: 'hold', score: 0 });
+      }
     }
 
     // Comprehensive income
