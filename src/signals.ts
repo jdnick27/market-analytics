@@ -115,8 +115,9 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   const price: number | undefined = oc?.close;
   const signals: IndicatorSignal[] = [];
 
-  const sharesFor = (r: any): number | undefined =>
-    extractShares(r) ?? (typeof sharesOutstanding === 'number' ? sharesOutstanding : undefined);
+  const sharesFor = (r: any, fallback = true): number | undefined =>
+    extractShares(r) ??
+    (fallback && typeof sharesOutstanding === 'number' ? sharesOutstanding : undefined);
 
   // RSI signal
   const rsiValue = rsiArr?.[0]?.value;
@@ -658,15 +659,28 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
 
   // Share dilution check using shares outstanding
   const sharesVals = finQ
-    .map((r: any) => sharesFor(r))
+    .map((r: any) => sharesFor(r, false))
     .filter((v): v is number => Number.isFinite(v));
-  const sharesGrowth = computeGrowthFromValues(sharesVals);
-  if (typeof sharesGrowth === 'number') {
+  if (sharesVals.length >= 2) {
+    const pctChanges = sharesVals
+      .slice(0, -1)
+      .map((v, i) => (sharesVals[i + 1] > 0 ? (v - sharesVals[i + 1]) / sharesVals[i + 1] : 0));
+    const increasing = pctChanges.every((p) => p > 0);
+    const decreasing = pctChanges.every((p) => p < 0);
+    const largeDrop = pctChanges.some((p) => p < -0.5);
+    const sharesGrowth = computeGrowthFromValues(sharesVals) ?? 0;
+
     let signal: 'buy' | 'sell' | 'hold' = 'hold';
     let score = Math.min(100, Math.round(Math.abs(sharesGrowth) * 100));
-    if (sharesGrowth > 0.05) {
+    if (increasing && sharesGrowth > 0) {
       signal = 'sell';
-    } else if (sharesGrowth < -0.05) {
+      score = Math.min(100, score + 20);
+    } else if (decreasing && sharesGrowth < 0 && !largeDrop) {
+      signal = 'buy';
+      score = Math.min(100, score + 20);
+    } else if (sharesGrowth > 0.02) {
+      signal = 'sell';
+    } else if (sharesGrowth < -0.02 && !largeDrop) {
       signal = 'buy';
     } else {
       score = 0;
