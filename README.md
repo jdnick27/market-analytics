@@ -1,6 +1,6 @@
 # market-analytics — polygon.io example
 
-This small example shows how to fetch the last trade for a stock using Polygon.io and print it to the console.
+This small example fetches market data from Polygon.io, generates indicator signals for many tickers, and prints both the best tickers to buy and the worst tickers to sell.
 
 Setup
 
@@ -17,11 +17,8 @@ npm install
 Run
 
 ```bash
-# default uses AAPL
-npm start
-
-# or pass a symbol
-node src/index.js TSLA
+# analyzes a predefined list of tickers and prints best and worst picks
+npm test
 ```
 
 Testing

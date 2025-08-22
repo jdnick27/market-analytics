@@ -62,11 +62,23 @@ async function main(): Promise<void> {
 
     const sorted = results.slice().sort((a, b) => b.score - a.score);
     const bestTickers = sorted.filter((r) => r.score > 0);
+    const worstTickers = sorted.filter((r) => r.score < 0).reverse();
     console.log('\nBest tickers to buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
+    console.log('Worst tickers to sell:', worstTickers.map((r) => `${r.symbol} (${r.score})`));
 
     // Create posts summarizing signals for the top 5 tickers to buy
     const topFive = bestTickers.slice(0, 5);
     const snapshots: Snapshot[] = topFive.map(({ symbol, signals, score }) => ({
+      ticker: symbol,
+      score,
+      indicators: Object.fromEntries(
+        signals.map((s) => [s.indicator, s.signal])
+      ) as Record<string, 'buy' | 'sell' | 'hold'>,
+    }));
+
+    // Create posts summarizing signals for the bottom 5 tickers to sell
+    const bottomFive = worstTickers.slice(0, 5);
+    const worstSnapshots: Snapshot[] = bottomFive.map(({ symbol, signals, score }) => ({
       ticker: symbol,
       score,
       indicators: Object.fromEntries(
@@ -83,7 +95,17 @@ async function main(): Promise<void> {
       },
       hashtags: [],
     });
-    console.log('\nPosts:', posts);
+    const worstPosts = formatPosts(worstSnapshots, {
+      maxBullets: 3,
+      emojis: {
+        header: ['🚀', '📉', '📊'],
+        strength: '🟢',
+        weakness: '🔴',
+      },
+      hashtags: [],
+    });
+    console.log('\nPosts (best):', posts);
+    console.log('\nPosts (worst):', worstPosts);
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;
