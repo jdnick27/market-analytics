@@ -37,14 +37,20 @@ function getNested(obj: any, path: string[]): any {
 }
 
 function computeGrowth(results: any[], path: string[]): number | undefined {
-  if (!Array.isArray(results) || results.length < 2) return undefined;
+  if (!Array.isArray(results) || results.length === 0) return undefined;
   const values = results
     .map((r) => {
       const v = getNested(r, path);
       return typeof v === 'object' && v !== null && 'value' in v ? (v as any).value : v;
     })
     .filter((v): v is number => Number.isFinite(v));
-  if (values.length < 2) return undefined;
+
+  if (values.length === 0) return undefined;
+  if (values.length === 1) {
+    const only = values[0];
+    return only !== 0 ? 0 : undefined;
+  }
+
   const latest = values[0];
   const oldest = values[values.length - 1];
   if (oldest === 0) return undefined;
@@ -52,7 +58,11 @@ function computeGrowth(results: any[], path: string[]): number | undefined {
 }
 
 function computeGrowthFromValues(values: number[]): number | undefined {
-  if (values.length < 2) return undefined;
+  if (values.length === 0) return undefined;
+  if (values.length === 1) {
+    const only = values[0];
+    return only !== 0 ? 0 : undefined;
+  }
   const latest = values[0];
   const oldest = values[values.length - 1];
   if (oldest === 0) return undefined;
@@ -104,6 +114,9 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   // oc is Polygon open-close response which has .close
   const price: number | undefined = oc?.close;
   const signals: IndicatorSignal[] = [];
+
+  const sharesFor = (r: any): number | undefined =>
+    extractShares(r) ?? (typeof sharesOutstanding === 'number' ? sharesOutstanding : undefined);
 
   // RSI signal
   const rsiValue = rsiArr?.[0]?.value;
@@ -645,7 +658,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
 
   // Share dilution check using shares outstanding
   const sharesVals = finQ
-    .map((r: any) => extractShares(r))
+    .map((r: any) => sharesFor(r))
     .filter((v): v is number => Number.isFinite(v));
   const sharesGrowth = computeGrowthFromValues(sharesVals);
   if (typeof sharesGrowth === 'number') {
@@ -665,7 +678,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   const epsValuesQ = finQ
     .map((r: any) => {
       const net = r.financials?.income_statement?.net_income_loss?.value;
-      const shares = extractShares(r);
+      const shares = sharesFor(r);
       return typeof net === 'number' && typeof shares === 'number' && shares > 0
         ? net / shares
         : undefined;
@@ -688,7 +701,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
   const epsValuesA = finA
     .map((r: any) => {
       const net = r.financials?.income_statement?.net_income_loss?.value;
-      const shares = extractShares(r);
+      const shares = sharesFor(r);
       return typeof net === 'number' && typeof shares === 'number' && shares > 0
         ? net / shares
         : undefined;
@@ -714,7 +727,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
       const revenue =
         r.financials?.income_statement?.net_sales?.value ??
         r.financials?.income_statement?.revenues?.value;
-      const shares = extractShares(r);
+      const shares = sharesFor(r);
       return typeof revenue === 'number' && typeof shares === 'number' && shares > 0
         ? revenue / shares
         : undefined;
@@ -744,7 +757,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
       const revenue =
         r.financials?.income_statement?.net_sales?.value ??
         r.financials?.income_statement?.revenues?.value;
-      const shares = extractShares(r);
+      const shares = sharesFor(r);
       return typeof revenue === 'number' && typeof shares === 'number' && shares > 0
         ? revenue / shares
         : undefined;
@@ -776,7 +789,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
         r.financials?.balance_sheet?.equity?.value ??
         r.financials?.balance_sheet?.stockholders_equity?.value ??
         r.financials?.balance_sheet?.total_stockholders_equity?.value;
-      const shares = extractShares(r);
+      const shares = sharesFor(r);
       return typeof equity === 'number' && typeof shares === 'number' && shares > 0
         ? equity / shares
         : undefined;
@@ -807,7 +820,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
         r.financials?.balance_sheet?.equity?.value ??
         r.financials?.balance_sheet?.stockholders_equity?.value ??
         r.financials?.balance_sheet?.total_stockholders_equity?.value;
-      const shares = extractShares(r);
+      const shares = sharesFor(r);
       return typeof equity === 'number' && typeof shares === 'number' && shares > 0
         ? equity / shares
         : undefined;
