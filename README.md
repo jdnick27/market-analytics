@@ -1,6 +1,6 @@
 # market-analytics — polygon.io example
 
-This small example fetches market data from Polygon.io, generates indicator signals for many tickers, and prints both the best tickers to buy and the worst tickers to sell.
+This small example fetches market data from Polygon.io, generates indicator signals for many tickers, and prints both the top stocks to buy and the top stocks to sell.
 
 Setup
 
@@ -17,7 +17,7 @@ npm install
 Run
 
 ```bash
-# analyzes a predefined list of tickers and prints best and worst picks
+# analyzes a predefined list of tickers and prints top stocks to buy and top stocks to sell
 npm test
 ```
 
