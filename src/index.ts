@@ -69,6 +69,18 @@ async function main(): Promise<void> {
     console.log('\nTop Stocks to Buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
     console.log('Top Stocks to Sell:', worstTickers.map((r) => `${r.symbol} (${r.score})`));
 
+    const topProjected = results
+      .filter(
+        (r): r is (typeof results)[number] & { projectedPrice: number } =>
+          typeof r.projectedPrice === 'number'
+      )
+      .sort((a, b) => b.projectedPrice - a.projectedPrice)
+      .slice(0, 10);
+    console.log(
+      '\nTop 10 Highest Projected Prices:',
+      topProjected.map((r) => `${r.symbol} (${r.projectedPrice.toFixed(2)})`)
+    );
+
     // Create posts summarizing signals for the top 5 stocks to buy
     const topBuys = bestTickers.slice(0, 5);
     const buySnapshots: Snapshot[] = topBuys.map(({ symbol, signals, score }) => ({
