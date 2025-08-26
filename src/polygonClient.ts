@@ -68,6 +68,37 @@ export async function getOpenClose(symbol: string, date: string): Promise<any> {
   return polygonGet(`/v1/open-close/${encodeURIComponent(symbol)}/${encodeURIComponent(date)}`);
 }
 
+/**
+ * Fetch daily aggregate price data for a ticker between two dates.
+ * Docs: https://polygon.io/docs/stocks/get_v2_aggs_ticker__stocksTicker__range__multiplier___timespan___from___to
+ */
+export async function getDailyAggregates(
+  ticker: string,
+  from: string,
+  to: string,
+): Promise<any[]> {
+  if (!ticker) throw new Error('ticker is required');
+  if (!from) throw new Error('from date is required');
+  if (!to) throw new Error('to date is required');
+  const apiKey = getApiKey();
+  const url = `${BASE}/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${from}/${to}`;
+  try {
+    const res = await axios.get(url, {
+      params: { apiKey, adjusted: true, sort: 'asc', limit: 50000 },
+      timeout: REQUEST_TIMEOUT,
+    });
+    return res.data?.results ?? [];
+  } catch (err: any) {
+    if (err.response) {
+      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const e: any = new Error(msg);
+      e.status = err.response.status;
+      throw e;
+    }
+    throw err;
+  }
+}
+
 // Technical indicators
 
 export async function getSMA(symbol: string, window = 50, timespan = 'day'): Promise<any> {

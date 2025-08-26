@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Market Analytics</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Market Analytics</h1>
+  <input id="ticker" placeholder="Enter TICKER" />
+  <button id="search">Search</button>
+  <canvas id="chart" width="800" height="400"></canvas>
+  <script>
+    async function fetchData(ticker) {
+      const res = await fetch(`/api/historical?ticker=${encodeURIComponent(ticker)}`);
+      if (!res.ok) throw new Error('Error fetching data');
+      return res.json();
+    }
+    document.getElementById('search').addEventListener('click', async () => {
+      const ticker = document.getElementById('ticker').value.trim();
+      if (!ticker) return;
+      try {
+        const data = await fetchData(ticker);
+        const labels = data.map(d => new Date(d.date).toISOString().slice(0,10));
+        const prices = data.map(d => d.close);
+        const ctx = document.getElementById('chart').getContext('2d');
+        if (window.stockChart) window.stockChart.destroy();
+        window.stockChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: ticker.toUpperCase(),
+              data: prices,
+              borderColor: 'blue',
+              fill: false
+            }]
+          }
+        });
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  </script>
+</body>
+</html>
