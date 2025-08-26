@@ -1,4 +1,3 @@
-
 # Copilot / Coding Agent notes
 
 This file explains how to interact with an automated coding agent (Copilot) for this repository.
@@ -7,7 +6,7 @@ How to request work from the Copilot coding agent
 
 - Add a clear task description. If you want the agent to implement changes and open a PR, include the tag:
 
-	`#github-pull-request_copilot-coding-agent`
+        `#github-pull-request_copilot-coding-agent`
 
 - Include the target branch name or leave it to the agent to create `copilot/<short-desc>`.
 
@@ -42,5 +41,5 @@ npm run test
 Notes
 
 - The agent follows `tsconfig.json` and repository conventions. If you want different behavior (for example, to compile to `dist/` and run the compiled file), make that explicit in the request.
+- Update `README.md`'s *Signal Reference* when adding or modifying signals in `src/signals.ts`.
 - Always review changes from the agent. Automated agents speed up work but cannot replace domain knowledge and review.
-
