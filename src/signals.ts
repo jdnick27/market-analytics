@@ -12,6 +12,7 @@ import {
 } from './polygonClient';
 
 export interface IndicatorSignal {
+  category: 'technical' | 'fundamental' | 'growth';
   indicator: string;
   value?: number;
   macd?: {
@@ -20,7 +21,7 @@ export interface IndicatorSignal {
     histogram: number;
   };
   signal: 'buy' | 'sell' | 'hold';
-  score: number; // 0 (neutral) to 100 (strong)
+  score: number; // -2..2 contribution
 }
 
 function previousDay(): string {
@@ -92,8 +93,8 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     macdArr,
     rsiArr,
     hiLo,
-    shortVol,
     shortInt,
+    shortVol,
     sharesOutstanding,
     finQ,
     finA,
@@ -104,14 +105,13 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     getMACD(symbol),
     getRSI(symbol),
     get52WeekHighLow(symbol, date),
-    getShortVolume(symbol, date),
     getShortInterest(symbol),
+    getShortVolume(symbol, date),
     getSharesOutstanding(symbol),
     getFinancialsHistory(symbol, 'quarterly', 10),
     getFinancialsHistory(symbol, 'annual', 10),
   ]);
 
-  // oc is Polygon open-close response which has .close
   const price: number | undefined = oc?.close;
   const signals: IndicatorSignal[] = [];
 
@@ -119,744 +119,465 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     extractShares(r) ??
     (fallback && typeof sharesOutstanding === 'number' ? sharesOutstanding : undefined);
 
-  // RSI signal
-  const rsiValue = rsiArr?.[0]?.value;
-  if (typeof rsiValue === 'number') {
-    if (rsiValue > 70) {
-      const score = Math.min(100, Math.round(((rsiValue - 70) / 30) * 100));
-      signals.push({ indicator: 'RSI', value: rsiValue, signal: 'sell', score });
-    } else if (rsiValue < 30) {
-      const score = Math.min(100, Math.round(((30 - rsiValue) / 30) * 100));
-      signals.push({ indicator: 'RSI', value: rsiValue, signal: 'buy', score });
+  // === Technical Indicators ===
+
+  // RSI
+  const rsi = rsiArr?.[0]?.value;
+  if (typeof rsi === 'number') {
+    if (rsi < 35) {
+      signals.push({ category: 'technical', indicator: 'RSI', value: rsi, signal: 'buy', score: 2 });
+    } else if (rsi > 65) {
+      signals.push({ category: 'technical', indicator: 'RSI', value: rsi, signal: 'sell', score: -2 });
     } else {
-      signals.push({ indicator: 'RSI', value: rsiValue, signal: 'hold', score: 0 });
+      signals.push({ category: 'technical', indicator: 'RSI', value: rsi, signal: 'hold', score: 0 });
     }
   }
 
-  // SMA signal
-  const smaValue = smaArr?.[0]?.value;
-  if (typeof smaValue === 'number' && typeof price === 'number') {
-    const diffPerc = ((price - smaValue) / smaValue) * 100;
-    const score = Math.min(100, Math.round(Math.abs(diffPerc)));
-    if (Math.abs(diffPerc) < 0.1) {
-      signals.push({ indicator: 'SMA', value: smaValue, signal: 'hold', score: 0 });
-    } else if (diffPerc > 0) {
-      signals.push({ indicator: 'SMA', value: smaValue, signal: 'buy', score });
+  // SMA Trend
+  const sma0 = smaArr?.[0]?.value;
+  const sma1 = smaArr?.[1]?.value;
+  if (typeof price === 'number' && typeof sma0 === 'number' && typeof sma1 === 'number') {
+    const priceAbove = price >= sma0 * 1.005;
+    const priceBelow = price <= sma0 * 0.995;
+    const smaUp = sma0 > sma1;
+    const smaDown = sma0 < sma1;
+    if (priceAbove && smaUp) {
+      signals.push({ category: 'technical', indicator: 'SMA Trend', signal: 'buy', score: 1 });
+    } else if (priceBelow && smaDown) {
+      signals.push({ category: 'technical', indicator: 'SMA Trend', signal: 'sell', score: -1 });
     } else {
-      signals.push({ indicator: 'SMA', value: smaValue, signal: 'sell', score });
+      signals.push({ category: 'technical', indicator: 'SMA Trend', signal: 'hold', score: 0 });
     }
   }
 
-  // 52-week high / low signal
+  // EMA Trend
+  const ema0 = emaArr?.[0]?.value;
+  const ema1 = emaArr?.[1]?.value;
+  if (typeof price === 'number' && typeof ema0 === 'number' && typeof ema1 === 'number') {
+    const priceAbove = price >= ema0 * 1.005;
+    const priceBelow = price <= ema0 * 0.995;
+    const emaUp = ema0 > ema1;
+    const emaDown = ema0 < ema1;
+    if (priceAbove && emaUp) {
+      signals.push({ category: 'technical', indicator: 'EMA Trend', signal: 'buy', score: 1 });
+    } else if (priceBelow && emaDown) {
+      signals.push({ category: 'technical', indicator: 'EMA Trend', signal: 'sell', score: -1 });
+    } else {
+      signals.push({ category: 'technical', indicator: 'EMA Trend', signal: 'hold', score: 0 });
+    }
+  }
+
+  // MACD
+  const macd0 = macdArr?.[0];
+  const macd1 = macdArr?.[1];
+  if (macd0 && macd1) {
+    const bullishCross = macd1.value <= macd1.signal && macd0.value > macd0.signal && macd0.histogram > 0;
+    const bearishCross = macd1.value >= macd1.signal && macd0.value < macd0.signal && macd0.histogram < 0;
+    if (bullishCross) {
+      signals.push({
+        category: 'technical',
+        indicator: 'MACD',
+        macd: { value: macd0.value, signal: macd0.signal, histogram: macd0.histogram },
+        signal: 'buy',
+        score: 2,
+      });
+    } else if (bearishCross) {
+      signals.push({
+        category: 'technical',
+        indicator: 'MACD',
+        macd: { value: macd0.value, signal: macd0.signal, histogram: macd0.histogram },
+        signal: 'sell',
+        score: -2,
+      });
+    } else {
+      signals.push({
+        category: 'technical',
+        indicator: 'MACD',
+        macd: { value: macd0.value, signal: macd0.signal, histogram: macd0.histogram },
+        signal: 'hold',
+        score: 0,
+      });
+    }
+  }
+
+  // 52-week high/low
   if (hiLo && typeof price === 'number') {
     const { high, low } = hiLo as { high: number; low: number };
     if (Number.isFinite(high) && Number.isFinite(low) && high > 0 && low > 0) {
-      const distHighPerc = ((high - price) / high) * 100; // percent below the high
-      const distLowPerc = ((price - low) / low) * 100; // percent above the low
-
-      // thresholds (percent): within 1% of either extreme is notable
-      const threshold = 1.0;
-
-      if (distHighPerc <= threshold) {
-        // price is within threshold of 52w high -> consider taking profits (sell)
-        const closeness = Math.max(0, 1 - distHighPerc / threshold); // 0..1 where 1 = at high
-        let score = Math.min(100, Math.round(closeness * 100));
-        // small boost if extremely close (within 0.25%)
-        if (distHighPerc <= 0.25) score = Math.min(100, score + 10);
-        signals.push({ indicator: '52W', value: high, signal: 'sell', score });
-      } else if (distLowPerc <= threshold) {
-        // price is within threshold of 52w low -> consider buying (oversold)
-        const closeness = Math.max(0, 1 - distLowPerc / threshold); // 0..1 where 1 = at low
-        let score = Math.min(100, Math.round(closeness * 100));
-        if (distLowPerc <= 0.25) score = Math.min(100, score + 10);
-        signals.push({ indicator: '52W', value: low, signal: 'buy', score });
+      const distHigh = (high - price) / high;
+      const distLow = (price - low) / low;
+      const threshold = 0.02; // 2%
+      if (distLow <= threshold) {
+        signals.push({ category: 'technical', indicator: '52W Range', signal: 'buy', score: 1 });
+      } else if (distHigh <= threshold) {
+        signals.push({ category: 'technical', indicator: '52W Range', signal: 'sell', score: -1 });
       } else {
-        signals.push({ indicator: '52W', value: price, signal: 'hold', score: 0 });
+        signals.push({ category: 'technical', indicator: '52W Range', signal: 'hold', score: 0 });
       }
     }
   }
 
-  // Short interest signal
+  // Short interest
   if (shortInt) {
     const si = shortInt as any;
-    // short_percent will never be present per your note; compute from short_interest / sharesOutstanding
     let shortPercent: number | undefined;
     if (Number.isFinite(si.short_interest)) {
       const shortInterestVal = Number(si.short_interest);
-      if (Number.isFinite((sharesOutstanding as any)) && Number(sharesOutstanding) > 0) {
-        shortPercent = (shortInterestVal / Number(sharesOutstanding)) * 100;
-      }
-      // If float is provided directly in SI, prefer that
-      else if (Number.isFinite(si.float) && si.float > 0) {
+      if (Number.isFinite(si.float) && si.float > 0) {
         shortPercent = (shortInterestVal / Number(si.float)) * 100;
+      } else if (typeof sharesOutstanding === 'number' && sharesOutstanding > 0) {
+        shortPercent = (shortInterestVal / sharesOutstanding) * 100;
       }
     }
-
     if (typeof shortPercent === 'number') {
-      // Use percentage-based thresholds when we have a true percent
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
-      let score = 0;
-      if (shortPercent > 20) {
-        signal = 'sell';
-        score = Math.min(100, Math.round(((shortPercent - 20) / 80) * 100));
-      } else if (shortPercent < 5) {
-        signal = 'buy';
-        score = Math.min(100, Math.round(((5 - shortPercent) / 5) * 100));
+      if (shortPercent < 10) {
+        signals.push({ category: 'technical', indicator: 'Short Interest', value: shortPercent, signal: 'buy', score: 1 });
+      } else if (shortPercent > 25) {
+        signals.push({ category: 'technical', indicator: 'Short Interest', value: shortPercent, signal: 'sell', score: -1 });
+      } else {
+        signals.push({ category: 'technical', indicator: 'Short Interest', value: shortPercent, signal: 'hold', score: 0 });
       }
-      signals.push({ indicator: 'SHORT_INT', value: shortPercent, signal, score });
     } else if (Number.isFinite(si.days_to_cover)) {
-      // Fallback: many APIs return short_interest, avg_daily_volume and days_to_cover instead of a percent.
-      // Use days_to_cover as a liquidity-based heuristic: high days-to-cover -> bearish, low -> bullish.
-      const days = Number(si.days_to_cover);
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
-      let score = 0;
-      if (days > 5) {
-        // heavy short interest relative to liquidity
-        signal = 'sell';
-        score = Math.min(100, Math.round(((days - 5) / 45) * 100)); // scale: 5..50 -> 0..100
-      } else if (days < 1) {
-        // very easy to cover shorts -> bullish
-        signal = 'buy';
-        score = Math.min(100, Math.round(((1 - days) / 1) * 100));
-      }
-      // store days_to_cover as the value when percent is not available
-      signals.push({ indicator: 'SHORT_INT', value: days, signal, score });
-    }
-  }
-
-  // Short volume signal
-  const shortVolVal = Number((shortVol as any)?.short_volume ?? (shortVol as any)?.shortVolume);
-  const totalVolVal = Number((shortVol as any)?.volume ?? (shortVol as any)?.total_volume);
-  if (Number.isFinite(shortVolVal) && Number.isFinite(totalVolVal) && totalVolVal > 0) {
-    const ratio = shortVolVal / totalVolVal;
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = 0;
-    if (ratio > 0.4) {
-      signal = 'sell';
-      score = Math.min(100, Math.round(((ratio - 0.4) / 0.6) * 100));
-    } else if (ratio < 0.2) {
-      signal = 'buy';
-      score = Math.min(100, Math.round(((0.2 - ratio) / 0.2) * 100));
-    }
-    signals.push({ indicator: 'SHORT_VOL', value: ratio, signal, score });
-  }
-
-  // EMA signal
-  const emaValue = emaArr?.[0]?.value;
-  if (typeof emaValue === 'number' && typeof price === 'number') {
-    const diffPerc = ((price - emaValue) / emaValue) * 100;
-    const score = Math.min(100, Math.round(Math.abs(diffPerc)));
-    if (Math.abs(diffPerc) < 0.1) {
-      signals.push({ indicator: 'EMA', value: emaValue, signal: 'hold', score: 0 });
-    } else if (diffPerc > 0) {
-      signals.push({ indicator: 'EMA', value: emaValue, signal: 'buy', score });
-    } else {
-      signals.push({ indicator: 'EMA', value: emaValue, signal: 'sell', score });
-    }
-  }
-
-  // Reworked MACD logic: look at multiple days to detect turning points.
-  // We prefer setups where the histogram has bottomed (more negative previously) and
-  // is now rising toward zero while the MACD line is approaching the signal line
-  // (i.e., the MACD - signal difference is shrinking and moving toward a positive cross).
-  // Also consider crosses of the 0.00 baseline (for MACD and histogram) as a bullish/bearish confirmation.
-  const macdArrRaw = macdArr ?? [];
-  if (Array.isArray(macdArrRaw) && macdArrRaw.length > 0) {
-    // Ensure we have newest-first ordering by timestamp when available.
-    const sorted = macdArrRaw.slice().sort((a: any, b: any) => {
-      const ta = a.t ?? a.timestamp ?? 0;
-      const tb = b.t ?? b.timestamp ?? 0;
-      return tb - ta; // newest first
-    });
-
-    const lookback = Math.min(5, sorted.length);
-    const recent = sorted.slice(0, lookback);
-
-    const hist = recent.map((r: any) => Number(r.histogram));
-    const macdVals = recent.map((r: any) => Number(r.value));
-    const sigVals = recent.map((r: any) => Number(r.signal));
-
-    const currentHist = hist[0];
-    const currentMacd = macdVals[0];
-    const currentSignal = sigVals[0];
-
-    const valid = [currentHist, currentMacd, currentSignal].every((v) => Number.isFinite(v));
-    if (valid) {
-      // Simple guard: if histogram is extremely small, treat as hold
-      if (Math.abs(currentHist) < 0.001) {
-        signals.push({
-          indicator: 'MACD',
-          macd: { value: currentMacd, signal: currentSignal, histogram: currentHist },
-          signal: 'hold',
-          score: 0,
-        });
+      const d = Number(si.days_to_cover);
+      if (d < 2) {
+        signals.push({ category: 'technical', indicator: 'Short Interest', value: d, signal: 'buy', score: 1 });
+      } else if (d > 6) {
+        signals.push({ category: 'technical', indicator: 'Short Interest', value: d, signal: 'sell', score: -1 });
       } else {
-        // Determine whether the histogram has recently bottomed and is rising
-        const histFinite = hist.filter(Number.isFinite);
-        const histMin = histFinite.length ? Math.min(...histFinite) : NaN;
-        const histMinIdx = hist.indexOf(histMin); // index in recent (0 = newest)
-        const prevHist = hist[1];
-        const histRising = Number.isFinite(prevHist) ? currentHist > prevHist : false;
-
-        // Compute MACD - signal diffs and whether they're approaching a cross
-        const diffs = recent.map((r: any, i: number) =>
-          Number.isFinite(macdVals[i]) && Number.isFinite(sigVals[i]) ? macdVals[i] - sigVals[i] : NaN
-        );
-        const currDiff = diffs[0];
-        const prevDiff = diffs[1];
-        const approaching = Number.isFinite(currDiff) && Number.isFinite(prevDiff)
-          ? Math.abs(prevDiff) > Math.abs(currDiff) && currDiff > prevDiff
-          : false;
-
-        // Baseline (0.00) crossover checks for MACD line and histogram
-        const prevMacd = macdVals[1];
-        const macdCrossUp = Number.isFinite(prevMacd) ? currentMacd > 0 && prevMacd <= 0 : false;
-        const macdCrossDown = Number.isFinite(prevMacd) ? currentMacd < 0 && prevMacd >= 0 : false;
-        const histCrossUp = Number.isFinite(prevHist) ? currentHist > 0 && prevHist <= 0 : false;
-        const histCrossDown = Number.isFinite(prevHist) ? currentHist < 0 && prevHist >= 0 : false;
-
-        // Score: prefer a deep bottom (big negative hist min) + strong approach to cross
-        let score = Math.min(100, Math.round(Math.abs(currentHist) * 100));
-
-        if (histMinIdx > 0 && histRising && approaching) {
-          // deeper bottom increases score; approaching improvement increases score
-          const depthScore = Math.min(100, Math.round(Math.abs(histMin) * 100));
-          const approachImprovement = Number.isFinite(prevDiff) && Math.abs(prevDiff) > 0
-            ? Math.min(100, Math.round(((Math.abs(prevDiff) - Math.abs(currDiff)) / Math.abs(prevDiff)) * 100))
-            : 0;
-          // blend depth and approach (60% depth, 40% approach)
-          score = Math.min(100, Math.round(depthScore * 0.6 + approachImprovement * 0.4));
-        }
-
-        // Boost score if we observe baseline cross confirmations
-        if (macdCrossUp || histCrossUp) {
-          score = Math.min(100, score + 20); // bullish confirmation
-        } else if (macdCrossDown || histCrossDown) {
-          score = Math.min(100, score + 20); // bearish confirmation
-        }
-
-        // Determine directional signal (consider cross-of-zero as confirmation/override)
-        if ((currentHist > 0 && currDiff > 0) || macdCrossUp || histCrossUp) {
-          signals.push({
-            indicator: 'MACD',
-            macd: { value: currentMacd, signal: currentSignal, histogram: currentHist },
-            signal: 'buy',
-            score,
-          });
-        } else if (histMinIdx > 0 && histRising && approaching && currDiff <= 0) {
-          // Bottoming and approaching cross from below — treat as a buy setup
-          signals.push({
-            indicator: 'MACD',
-            macd: { value: currentMacd, signal: currentSignal, histogram: currentHist },
-            signal: 'buy',
-            score,
-          });
-        } else if ((currentHist < 0 && currDiff < 0) || macdCrossDown || histCrossDown) {
-          signals.push({
-            indicator: 'MACD',
-            macd: { value: currentMacd, signal: currentSignal, histogram: currentHist },
-            signal: 'sell',
-            score,
-          });
-        } else {
-          signals.push({
-            indicator: 'MACD',
-            macd: { value: currentMacd, signal: currentSignal, histogram: currentHist },
-            signal: 'hold',
-            score: 0,
-          });
-        }
+        signals.push({ category: 'technical', indicator: 'Short Interest', value: d, signal: 'hold', score: 0 });
       }
     }
   }
 
-  // Fundamental financial signals
-  const latestFin = Array.isArray(finQ) && finQ.length > 0 ? finQ[0] : null;
-  if (latestFin && latestFin.financials) {
-    const fs = latestFin.financials;
-    const shares =
-      extractShares(latestFin) ?? (typeof sharesOutstanding === 'number' ? sharesOutstanding : undefined);
-
-    // Current ratio: current assets / current liabilities
-    const ca = fs.balance_sheet?.current_assets?.value;
-    const cl = fs.balance_sheet?.current_liabilities?.value;
-    if (Number.isFinite(ca) && Number.isFinite(cl) && cl !== 0) {
-      const ratio = ca / cl;
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
-      let score = 0;
-      if (ratio > 1.5) {
-        signal = 'buy';
-        score = Math.min(100, Math.round((ratio - 1.5) * 50));
-      } else if (ratio < 1) {
-        signal = 'sell';
-        score = Math.min(100, Math.round((1 - ratio) * 100));
-      }
-      signals.push({ indicator: 'Current Ratio', value: ratio, signal, score });
+  // Short volume ratio
+  if (shortVol) {
+    const sv = shortVol as any;
+    let ratio: number | undefined;
+    if (Number.isFinite(sv.short_volume) && Number.isFinite(sv.total_volume) && sv.total_volume > 0) {
+      ratio = sv.short_volume / sv.total_volume;
     }
-
-    // Debt to equity: liabilities / equity
-    const liab = fs.balance_sheet?.liabilities?.value;
-    const eq = fs.balance_sheet?.equity?.value;
-    if (Number.isFinite(liab) && Number.isFinite(eq) && eq !== 0) {
-      const ratio = liab / eq;
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
-      let score = 0;
-      if (ratio < 1) {
-        signal = 'buy';
-        score = Math.min(100, Math.round((1 - ratio) * 100));
-      } else if (ratio > 2) {
-        signal = 'sell';
-        score = Math.min(100, Math.round((ratio - 2) * 50));
-      }
-      signals.push({ indicator: 'Debt/Equity', value: ratio, signal, score });
-    }
-
-    // Net margin: net income / revenues
-    const rev = fs.income_statement?.revenues?.value;
-    const net = fs.income_statement?.net_income_loss?.value;
-    if (Number.isFinite(rev) && Number.isFinite(net) && rev !== 0) {
-      const margin = net / rev;
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
-      let score = 0;
-      if (margin > 0.1) {
-        signal = 'buy';
-        score = Math.min(100, Math.round(margin * 1000));
-      } else if (margin < 0) {
-        signal = 'sell';
-        score = Math.min(100, Math.round(Math.abs(margin) * 1000));
-      }
-      signals.push({ indicator: 'Net Margin', value: margin, signal, score });
-    }
-
-    // Operating cash flow
-    const opCash = fs.cash_flow_statement?.net_cash_flow_from_operating_activities?.value;
-    if (Number.isFinite(opCash)) {
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
-      let score = Math.min(100, Math.round(Math.abs(opCash) / 1e6));
-      if (opCash > 0) {
-        signal = 'buy';
-      } else if (opCash < 0) {
-        signal = 'sell';
+    if (typeof ratio === 'number') {
+      if (ratio < 0.25) {
+        signals.push({ category: 'technical', indicator: 'Short Volume Ratio', value: ratio, signal: 'buy', score: 1 });
+      } else if (ratio > 0.45) {
+        signals.push({ category: 'technical', indicator: 'Short Volume Ratio', value: ratio, signal: 'sell', score: -1 });
       } else {
-        score = 0;
+        signals.push({ category: 'technical', indicator: 'Short Volume Ratio', value: ratio, signal: 'hold', score: 0 });
       }
-      signals.push({ indicator: 'Operating Cash Flow', value: opCash, signal, score });
     }
+  }
 
-    // Net cash flow
-    const netCash = fs.cash_flow_statement?.net_cash_flow?.value;
-    if (Number.isFinite(netCash)) {
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
-      let score = Math.min(100, Math.round(Math.abs(netCash) / 1e6));
-      if (netCash > 0) {
-        signal = 'buy';
-      } else if (netCash < 0) {
-        signal = 'sell';
+  // === Fundamentals ===
+  const latestQ = finQ?.[0];
+  const latestA = finA?.[0];
+
+  if (latestQ) {
+    const currentAssets = getNested(latestQ, ['financials', 'balance_sheet', 'current_assets', 'value']);
+    const currentLiabilities = getNested(latestQ, ['financials', 'balance_sheet', 'current_liabilities', 'value']);
+    if (Number.isFinite(currentAssets) && Number.isFinite(currentLiabilities) && currentLiabilities !== 0) {
+      const cr = currentAssets / currentLiabilities;
+      if (cr > 2) {
+        signals.push({ category: 'fundamental', indicator: 'Current Ratio', value: cr, signal: 'buy', score: 1 });
+      } else if (cr < 1) {
+        signals.push({ category: 'fundamental', indicator: 'Current Ratio', value: cr, signal: 'sell', score: -1 });
       } else {
-        score = 0;
-      }
-      signals.push({ indicator: 'Net Cash Flow', value: netCash, signal, score });
-    }
-
-    // Price/Earnings ratio
-    if (
-      typeof price === 'number' &&
-      typeof net === 'number' &&
-      typeof shares === 'number' &&
-      shares > 0
-    ) {
-      const eps = net / shares;
-      if (eps !== 0) {
-        const pe = price / eps;
-        let signal: 'buy' | 'sell' | 'hold' = 'hold';
-        let score = 0;
-        if (pe > 30 || pe < 0) {
-          signal = 'sell';
-          score = Math.min(100, Math.round((Math.abs(pe - 30) / 30) * 100));
-        } else if (pe < 15) {
-          signal = 'buy';
-          score = Math.min(100, Math.round(((15 - pe) / 15) * 100));
-        }
-        signals.push({ indicator: 'Price/Earnings', value: pe, signal, score });
+        signals.push({ category: 'fundamental', indicator: 'Current Ratio', value: cr, signal: 'hold', score: 0 });
       }
     }
 
-    // Price/Sales ratio
-    const sales = fs.income_statement?.net_sales?.value ?? fs.income_statement?.revenues?.value;
-    if (
-      typeof price === 'number' &&
-      typeof sales === 'number' &&
-      typeof shares === 'number' &&
-      shares > 0
-    ) {
-      const sps = sales / shares; // sales per share
-      if (sps !== 0) {
-        const ps = price / sps;
-        let signal: 'buy' | 'sell' | 'hold' = 'hold';
-        let score = 0;
-        if (ps > 3) {
-          signal = 'sell';
-          score = Math.min(100, Math.round(((ps - 3) / 3) * 100));
-        } else if (ps < 1) {
-          signal = 'buy';
-          score = Math.min(100, Math.round(((1 - ps) / 1) * 100));
-        }
-        signals.push({ indicator: 'Price/Sales', value: ps, signal, score });
-      }
-    }
-
-    // Price/Revenue ratio
-    const revenue = fs.income_statement?.revenues?.value;
-    if (
-      typeof price === 'number' &&
-      typeof revenue === 'number' &&
-      typeof shares === 'number' &&
-      shares > 0
-    ) {
-      const rps = revenue / shares; // revenue per share
-      if (rps !== 0) {
-        const pr = price / rps;
-        let signal: 'buy' | 'sell' | 'hold' = 'hold';
-        let score = 0;
-        if (pr > 3) {
-          signal = 'sell';
-          score = Math.min(100, Math.round(((pr - 3) / 3) * 100));
-        } else if (pr < 1) {
-          signal = 'buy';
-          score = Math.min(100, Math.round(((1 - pr) / 1) * 100));
-        }
-        signals.push({ indicator: 'Price/Revenue', value: pr, signal, score });
-      }
-    }
-
-    // Book value per share
+    const totalLiab = getNested(latestQ, ['financials', 'balance_sheet', 'total_liabilities', 'value']);
     const equity =
-      fs.balance_sheet?.equity?.value ??
-      fs.balance_sheet?.stockholders_equity?.value ??
-      fs.balance_sheet?.total_stockholders_equity?.value;
-    if (typeof equity === 'number' && typeof shares === 'number' && shares > 0) {
-      const bps = equity / shares;
-      if (typeof price === 'number') {
-        let signal: 'buy' | 'sell' | 'hold' = 'hold';
-        let score = 0;
-        if (bps <= 0) {
-          // negative book value is a strong bearish signal
-          signal = 'sell';
-          score = 100;
-        } else if (price < bps) {
-          signal = 'buy';
-          score = Math.min(100, Math.round(((bps - price) / bps) * 100));
-        } else if (price > bps * 2) {
-          signal = 'sell';
-          score = Math.min(100, Math.round(Math.abs((price / bps - 2) / 2) * 100));
-        }
-        signals.push({ indicator: 'Book Value Per Share', value: bps, signal, score });
+      getNested(latestQ, ['financials', 'balance_sheet', 'stockholders_equity', 'value']) ??
+      getNested(latestQ, ['financials', 'balance_sheet', 'total_stockholders_equity', 'value']);
+    if (Number.isFinite(totalLiab) && Number.isFinite(equity) && equity !== 0) {
+      const de = totalLiab / equity;
+      if (de < 0.8) {
+        signals.push({ category: 'fundamental', indicator: 'Debt/Equity', value: de, signal: 'buy', score: 1 });
+      } else if (de > 2.5) {
+        signals.push({ category: 'fundamental', indicator: 'Debt/Equity', value: de, signal: 'sell', score: -1 });
       } else {
-        signals.push({ indicator: 'Book Value Per Share', value: bps, signal: 'hold', score: 0 });
+        signals.push({ category: 'fundamental', indicator: 'Debt/Equity', value: de, signal: 'hold', score: 0 });
+      }
+    }
+
+    const netIncome = getNested(latestQ, ['financials', 'income_statement', 'net_income', 'value']);
+    const revenue =
+      getNested(latestQ, ['financials', 'income_statement', 'revenues', 'value']) ??
+      getNested(latestQ, ['financials', 'income_statement', 'net_sales', 'value']);
+    if (Number.isFinite(netIncome) && Number.isFinite(revenue) && revenue !== 0) {
+      const nm = netIncome / revenue;
+      if (nm > 0.12) {
+        signals.push({ category: 'fundamental', indicator: 'Net Margin', value: nm, signal: 'buy', score: 2 });
+      } else if (nm < 0) {
+        signals.push({ category: 'fundamental', indicator: 'Net Margin', value: nm, signal: 'sell', score: -2 });
+      } else {
+        signals.push({ category: 'fundamental', indicator: 'Net Margin', value: nm, signal: 'hold', score: 0 });
+      }
+    }
+
+    // Operating Cash Flow
+    const ocfValues = finQ
+      .map((r: any) =>
+        getNested(r, ['financials', 'cash_flow_statement', 'net_cash_provided_by_operating_activities', 'value'])
+      )
+      .filter((v): v is number => Number.isFinite(v));
+    if (ocfValues.length) {
+      const ocfLatest = ocfValues[0];
+      const ocfGrowing = ocfValues.length >= 3 && ocfValues[0] > ocfValues[1] && ocfValues[1] > ocfValues[2];
+      const ocfNeg2 = ocfValues.slice(0, 2).every((v) => v < 0);
+      if (ocfLatest > 0 && ocfGrowing) {
+        signals.push({ category: 'fundamental', indicator: 'Operating Cash Flow', signal: 'buy', score: 1 });
+      } else if (ocfNeg2) {
+        signals.push({ category: 'fundamental', indicator: 'Operating Cash Flow', signal: 'sell', score: -1 });
+      } else {
+        signals.push({ category: 'fundamental', indicator: 'Operating Cash Flow', signal: 'hold', score: 0 });
+      }
+    }
+
+    // Net Cash Flow
+    const netCFValues = finQ
+      .map((r: any) => getNested(r, ['financials', 'cash_flow_statement', 'net_cash_flow', 'value']))
+      .filter((v): v is number => Number.isFinite(v));
+    if (netCFValues.length) {
+      const netCFLatest = netCFValues[0];
+      const netCFNegCount = netCFValues.slice(0, 4).filter((v) => v < 0).length;
+      if (netCFLatest > 0) {
+        signals.push({ category: 'fundamental', indicator: 'Net Cash Flow', signal: 'buy', score: 1 });
+      } else if (netCFNegCount > 2) {
+        signals.push({ category: 'fundamental', indicator: 'Net Cash Flow', signal: 'sell', score: -1 });
+      } else {
+        signals.push({ category: 'fundamental', indicator: 'Net Cash Flow', signal: 'hold', score: 0 });
+      }
+    }
+
+    // Valuation metrics
+    if (typeof price === 'number') {
+      const shares = sharesFor(latestA ?? latestQ);
+      const eps = Number.isFinite(netIncome) && typeof shares === 'number' && shares > 0 ? netIncome / shares : undefined;
+      const bvps = (() => {
+        const eq =
+          getNested(latestA ?? latestQ, ['financials', 'balance_sheet', 'stockholders_equity', 'value']) ??
+          getNested(latestA ?? latestQ, ['financials', 'balance_sheet', 'total_stockholders_equity', 'value']);
+        return Number.isFinite(eq) && typeof shares === 'number' && shares > 0 ? eq / shares : undefined;
+      })();
+      const revenuePS = Number.isFinite(revenue) && typeof shares === 'number' && shares > 0 ? revenue / shares : undefined;
+      const pe = typeof eps === 'number' && eps !== 0 ? price / eps : undefined;
+      const ps = typeof revenuePS === 'number' && revenuePS !== 0 ? price / revenuePS : undefined;
+      const pr = ps; // treat P/R same as P/S
+
+      if (typeof pe === 'number') {
+        if (pe >= 8 && pe <= 18) {
+          signals.push({ category: 'fundamental', indicator: 'PE Ratio', value: pe, signal: 'buy', score: 1 });
+        } else if (pe > 35 || pe < 0) {
+          signals.push({ category: 'fundamental', indicator: 'PE Ratio', value: pe, signal: 'sell', score: -1 });
+        } else {
+          signals.push({ category: 'fundamental', indicator: 'PE Ratio', value: pe, signal: 'hold', score: 0 });
+        }
+      } else {
+        signals.push({ category: 'fundamental', indicator: 'PE Ratio', signal: 'hold', score: 0 });
+      }
+
+      if (typeof ps === 'number') {
+        if (ps < 2) {
+          signals.push({ category: 'fundamental', indicator: 'Price/Sales Ratio', value: ps, signal: 'buy', score: 1 });
+        } else if (ps > 4) {
+          signals.push({ category: 'fundamental', indicator: 'Price/Sales Ratio', value: ps, signal: 'sell', score: -1 });
+        } else {
+          signals.push({ category: 'fundamental', indicator: 'Price/Sales Ratio', value: ps, signal: 'hold', score: 0 });
+        }
+      } else {
+        signals.push({ category: 'fundamental', indicator: 'Price/Sales Ratio', signal: 'hold', score: 0 });
+      }
+
+      if (typeof pr === 'number') {
+        if (pr < 2) {
+          signals.push({ category: 'fundamental', indicator: 'Price/Revenue Ratio', value: pr, signal: 'buy', score: 1 });
+        } else if (pr > 4) {
+          signals.push({ category: 'fundamental', indicator: 'Price/Revenue Ratio', value: pr, signal: 'sell', score: -1 });
+        } else {
+          signals.push({ category: 'fundamental', indicator: 'Price/Revenue Ratio', value: pr, signal: 'hold', score: 0 });
+        }
+      } else {
+        signals.push({ category: 'fundamental', indicator: 'Price/Revenue Ratio', signal: 'hold', score: 0 });
+      }
+
+      if (typeof bvps === 'number') {
+        if (price <= 0.9 * bvps) {
+          signals.push({ category: 'fundamental', indicator: 'Price/BVPS', value: price / bvps, signal: 'buy', score: 1 });
+        } else if (bvps <= 0 || price >= 2.5 * bvps) {
+          signals.push({ category: 'fundamental', indicator: 'Price/BVPS', value: price / bvps, signal: 'sell', score: -1 });
+        } else {
+          signals.push({ category: 'fundamental', indicator: 'Price/BVPS', value: price / bvps, signal: 'hold', score: 0 });
+        }
+      } else {
+        signals.push({ category: 'fundamental', indicator: 'Price/BVPS', signal: 'hold', score: 0 });
       }
     }
 
     // Comprehensive income
-    const compInc = fs.comprehensive_income?.comprehensive_income_loss?.value;
-    if (Number.isFinite(compInc)) {
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
-      let score = Math.min(100, Math.round(Math.abs(compInc) / 1e6));
-      if (compInc > 0) {
-        signal = 'buy';
-      } else if (compInc < 0) {
-        signal = 'sell';
+    const compValues = finQ
+      .map((r: any) => getNested(r, ['financials', 'income_statement', 'comprehensive_income', 'value']))
+      .filter((v): v is number => Number.isFinite(v));
+    if (compValues.length >= 2) {
+      const pos2 = compValues.slice(0, 2).every((v) => v > 0);
+      const neg2 = compValues.slice(0, 2).every((v) => v < 0);
+      if (pos2) {
+        signals.push({ category: 'fundamental', indicator: 'Comprehensive Income', signal: 'buy', score: 1 });
+      } else if (neg2) {
+        signals.push({ category: 'fundamental', indicator: 'Comprehensive Income', signal: 'sell', score: -1 });
       } else {
-        score = 0;
+        signals.push({ category: 'fundamental', indicator: 'Comprehensive Income', signal: 'hold', score: 0 });
       }
-      signals.push({ indicator: 'Comprehensive Income', value: compInc, signal, score });
     }
   }
 
-  // Growth signals from historical filings
-  const revGrowthQ = computeGrowth(finQ, ['financials', 'income_statement', 'revenues', 'value']);
-  if (typeof revGrowthQ === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(revGrowthQ) * 100));
-    if (revGrowthQ > 0.05) {
-      signal = 'buy';
-    } else if (revGrowthQ < -0.05) {
-      signal = 'sell';
+  // === Growth Metrics ===
+
+  // Revenue growth
+  const revGrowthQ =
+    computeGrowth(finQ, ['financials', 'income_statement', 'revenues', 'value']) ??
+    computeGrowth(finQ, ['financials', 'income_statement', 'net_sales', 'value']);
+  const revGrowthA =
+    computeGrowth(finA, ['financials', 'income_statement', 'revenues', 'value']) ??
+    computeGrowth(finA, ['financials', 'income_statement', 'net_sales', 'value']);
+  if (typeof revGrowthQ === 'number' || typeof revGrowthA === 'number') {
+    if ((revGrowthQ ?? -Infinity) > 0.08 || (revGrowthA ?? -Infinity) > 0.07) {
+      signals.push({ category: 'growth', indicator: 'Revenue Growth', signal: 'buy', score: 1 });
+    } else if ((revGrowthQ ?? Infinity) < -0.08 || (revGrowthA ?? Infinity) < -0.07) {
+      signals.push({ category: 'growth', indicator: 'Revenue Growth', signal: 'sell', score: -1 });
     } else {
-      score = 0;
+      signals.push({ category: 'growth', indicator: 'Revenue Growth', signal: 'hold', score: 0 });
     }
-    signals.push({ indicator: 'Revenue Growth (Q)', value: revGrowthQ, signal, score });
   }
 
-  const revGrowthA = computeGrowth(finA, ['financials', 'income_statement', 'revenues', 'value']);
-  if (typeof revGrowthA === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(revGrowthA) * 100));
-    if (revGrowthA > 0.05) {
-      signal = 'buy';
-    } else if (revGrowthA < -0.05) {
-      signal = 'sell';
+  // Net income growth
+  const niGrowthQ = computeGrowth(finQ, ['financials', 'income_statement', 'net_income', 'value']);
+  const niGrowthA = computeGrowth(finA, ['financials', 'income_statement', 'net_income', 'value']);
+  if (typeof niGrowthQ === 'number' || typeof niGrowthA === 'number') {
+    if ((niGrowthQ ?? -Infinity) > 0.08 || (niGrowthA ?? -Infinity) > 0.07) {
+      signals.push({ category: 'growth', indicator: 'Net Income Growth', signal: 'buy', score: 1 });
+    } else if ((niGrowthQ ?? Infinity) < -0.08 || (niGrowthA ?? Infinity) < -0.07) {
+      signals.push({ category: 'growth', indicator: 'Net Income Growth', signal: 'sell', score: -1 });
     } else {
-      score = 0;
+      signals.push({ category: 'growth', indicator: 'Net Income Growth', signal: 'hold', score: 0 });
     }
-    signals.push({ indicator: 'Revenue Growth (Y)', value: revGrowthA, signal, score });
   }
 
-  const netGrowthQ = computeGrowth(finQ, ['financials', 'income_statement', 'net_income_loss', 'value']);
-  if (typeof netGrowthQ === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(netGrowthQ) * 100));
-    if (netGrowthQ > 0.05) {
-      signal = 'buy';
-    } else if (netGrowthQ < -0.05) {
-      signal = 'sell';
+  // Operating cash flow growth
+  const ocfGrowthQ = computeGrowth(finQ, ['financials', 'cash_flow_statement', 'net_cash_provided_by_operating_activities', 'value']);
+  const ocfGrowthA = computeGrowth(finA, ['financials', 'cash_flow_statement', 'net_cash_provided_by_operating_activities', 'value']);
+  if (typeof ocfGrowthQ === 'number' || typeof ocfGrowthA === 'number') {
+    if ((ocfGrowthQ ?? -Infinity) > 0.08 || (ocfGrowthA ?? -Infinity) > 0.07) {
+      signals.push({ category: 'growth', indicator: 'Operating Cash Flow Growth', signal: 'buy', score: 1 });
+    } else if ((ocfGrowthQ ?? Infinity) < -0.08 || (ocfGrowthA ?? Infinity) < -0.07) {
+      signals.push({ category: 'growth', indicator: 'Operating Cash Flow Growth', signal: 'sell', score: -1 });
     } else {
-      score = 0;
+      signals.push({ category: 'growth', indicator: 'Operating Cash Flow Growth', signal: 'hold', score: 0 });
     }
-    signals.push({ indicator: 'Net Income Growth (Q)', value: netGrowthQ, signal, score });
-  }
-
-  const netGrowthA = computeGrowth(finA, ['financials', 'income_statement', 'net_income_loss', 'value']);
-  if (typeof netGrowthA === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(netGrowthA) * 100));
-    if (netGrowthA > 0.05) {
-      signal = 'buy';
-    } else if (netGrowthA < -0.05) {
-      signal = 'sell';
-    } else {
-      score = 0;
-    }
-    signals.push({ indicator: 'Net Income Growth (Y)', value: netGrowthA, signal, score });
-  }
-
-  const cashGrowthQ = computeGrowth(finQ, ['financials', 'cash_flow_statement', 'net_cash_flow_from_operating_activities', 'value']);
-  if (typeof cashGrowthQ === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(cashGrowthQ) * 100));
-    if (cashGrowthQ > 0.05) {
-      signal = 'buy';
-    } else if (cashGrowthQ < -0.05) {
-      signal = 'sell';
-    } else {
-      score = 0;
-    }
-    signals.push({ indicator: 'Op Cash Flow Growth (Q)', value: cashGrowthQ, signal, score });
-  }
-
-  const cashGrowthA = computeGrowth(finA, ['financials', 'cash_flow_statement', 'net_cash_flow_from_operating_activities', 'value']);
-  if (typeof cashGrowthA === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(cashGrowthA) * 100));
-    if (cashGrowthA > 0.05) {
-      signal = 'buy';
-    } else if (cashGrowthA < -0.05) {
-      signal = 'sell';
-    } else {
-      score = 0;
-    }
-    signals.push({ indicator: 'Op Cash Flow Growth (Y)', value: cashGrowthA, signal, score });
-  }
-
-  // Share dilution check using shares outstanding
-  const sharesVals = finQ
-    .map((r: any) => sharesFor(r, false))
-    .filter((v): v is number => Number.isFinite(v));
-  if (sharesVals.length >= 2) {
-    const pctChanges = sharesVals
-      .slice(0, -1)
-      .map((v, i) => (sharesVals[i + 1] > 0 ? (v - sharesVals[i + 1]) / sharesVals[i + 1] : 0));
-    const increasing = pctChanges.every((p) => p > 0);
-    const decreasing = pctChanges.every((p) => p < 0);
-    const largeDrop = pctChanges.some((p) => p < -0.5);
-    const sharesGrowth = computeGrowthFromValues(sharesVals) ?? 0;
-
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(sharesGrowth) * 100));
-    if (increasing && sharesGrowth > 0) {
-      signal = 'sell';
-      score = Math.min(100, score + 20);
-    } else if (decreasing && sharesGrowth < 0 && !largeDrop) {
-      signal = 'buy';
-      score = Math.min(100, score + 20);
-    } else if (sharesGrowth > 0.02) {
-      signal = 'sell';
-    } else if (sharesGrowth < -0.02 && !largeDrop) {
-      signal = 'buy';
-    } else {
-      score = 0;
-    }
-    signals.push({ indicator: 'Share Dilution', value: sharesGrowth, signal, score });
   }
 
   // EPS growth
   const epsValuesQ = finQ
     .map((r: any) => {
-      const net = r.financials?.income_statement?.net_income_loss?.value;
-      const shares = sharesFor(r);
-      return typeof net === 'number' && typeof shares === 'number' && shares > 0
-        ? net / shares
-        : undefined;
+      const ni = getNested(r, ['financials', 'income_statement', 'net_income', 'value']);
+      const sh = sharesFor(r);
+      return typeof ni === 'number' && typeof sh === 'number' && sh > 0 ? ni / sh : undefined;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  const epsValuesA = finA
+    .map((r: any) => {
+      const ni = getNested(r, ['financials', 'income_statement', 'net_income', 'value']);
+      const sh = sharesFor(r);
+      return typeof ni === 'number' && typeof sh === 'number' && sh > 0 ? ni / sh : undefined;
     })
     .filter((v): v is number => Number.isFinite(v));
   const epsGrowthQ = computeGrowthFromValues(epsValuesQ);
-  if (typeof epsGrowthQ === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(epsGrowthQ) * 100));
-    if (epsGrowthQ > 0.05) {
-      signal = 'buy';
-    } else if (epsGrowthQ < -0.05) {
-      signal = 'sell';
+  const epsGrowthA = computeGrowthFromValues(epsValuesA);
+  if (typeof epsGrowthQ === 'number' || typeof epsGrowthA === 'number') {
+    if ((epsGrowthQ ?? -Infinity) > 0.08 || (epsGrowthA ?? -Infinity) > 0.07) {
+      signals.push({ category: 'growth', indicator: 'EPS Growth', signal: 'buy', score: 2 });
+    } else if ((epsGrowthQ ?? Infinity) < -0.08 || (epsGrowthA ?? Infinity) < -0.07) {
+      signals.push({ category: 'growth', indicator: 'EPS Growth', signal: 'sell', score: -2 });
     } else {
-      score = 0;
+      signals.push({ category: 'growth', indicator: 'EPS Growth', signal: 'hold', score: 0 });
     }
-    signals.push({ indicator: 'EPS Growth (Q)', value: epsGrowthQ, signal, score });
   }
 
-  const epsValuesA = finA
-    .map((r: any) => {
-      const net = r.financials?.income_statement?.net_income_loss?.value;
-      const shares = sharesFor(r);
-      return typeof net === 'number' && typeof shares === 'number' && shares > 0
-        ? net / shares
-        : undefined;
-    })
+  // Share dilution
+  const sharesValuesQ = finQ
+    .map((r: any) => sharesFor(r))
     .filter((v): v is number => Number.isFinite(v));
-  const epsGrowthA = computeGrowthFromValues(epsValuesA);
-  if (typeof epsGrowthA === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(epsGrowthA) * 100));
-    if (epsGrowthA > 0.05) {
-      signal = 'buy';
-    } else if (epsGrowthA < -0.05) {
-      signal = 'sell';
+  const sharesGrowth = computeGrowthFromValues(sharesValuesQ);
+  if (typeof sharesGrowth === 'number') {
+    if (sharesGrowth < -0.03) {
+      signals.push({ category: 'growth', indicator: 'Share Dilution', signal: 'buy', score: 1 });
+    } else if (sharesGrowth > 0.03) {
+      signals.push({ category: 'growth', indicator: 'Share Dilution', signal: 'sell', score: -1 });
     } else {
-      score = 0;
+      signals.push({ category: 'growth', indicator: 'Share Dilution', signal: 'hold', score: 0 });
     }
-    signals.push({ indicator: 'EPS Growth (Y)', value: epsGrowthA, signal, score });
   }
 
   // Revenue per share growth
   const revPerShareQ = finQ
     .map((r: any) => {
-      const revenue =
-        r.financials?.income_statement?.net_sales?.value ??
-        r.financials?.income_statement?.revenues?.value;
-      const shares = sharesFor(r);
-      return typeof revenue === 'number' && typeof shares === 'number' && shares > 0
-        ? revenue / shares
-        : undefined;
+      const rev =
+        getNested(r, ['financials', 'income_statement', 'revenues', 'value']) ??
+        getNested(r, ['financials', 'income_statement', 'net_sales', 'value']);
+      const sh = sharesFor(r);
+      return typeof rev === 'number' && typeof sh === 'number' && sh > 0 ? rev / sh : undefined;
+    })
+    .filter((v): v is number => Number.isFinite(v));
+  const revPerShareA = finA
+    .map((r: any) => {
+      const rev =
+        getNested(r, ['financials', 'income_statement', 'revenues', 'value']) ??
+        getNested(r, ['financials', 'income_statement', 'net_sales', 'value']);
+      const sh = sharesFor(r);
+      return typeof rev === 'number' && typeof sh === 'number' && sh > 0 ? rev / sh : undefined;
     })
     .filter((v): v is number => Number.isFinite(v));
   const revPSGrowthQ = computeGrowthFromValues(revPerShareQ);
-  if (typeof revPSGrowthQ === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(revPSGrowthQ) * 100));
-    if (revPSGrowthQ > 0.05) {
-      signal = 'buy';
-    } else if (revPSGrowthQ < -0.05) {
-      signal = 'sell';
-    } else {
-      score = 0;
-    }
-    signals.push({
-      indicator: 'Revenue Per Share Growth (Q)',
-      value: revPSGrowthQ,
-      signal,
-      score,
-    });
-  }
-
-  const revPerShareA = finA
-    .map((r: any) => {
-      const revenue =
-        r.financials?.income_statement?.net_sales?.value ??
-        r.financials?.income_statement?.revenues?.value;
-      const shares = sharesFor(r);
-      return typeof revenue === 'number' && typeof shares === 'number' && shares > 0
-        ? revenue / shares
-        : undefined;
-    })
-    .filter((v): v is number => Number.isFinite(v));
   const revPSGrowthA = computeGrowthFromValues(revPerShareA);
-  if (typeof revPSGrowthA === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(revPSGrowthA) * 100));
-    if (revPSGrowthA > 0.05) {
-      signal = 'buy';
-    } else if (revPSGrowthA < -0.05) {
-      signal = 'sell';
+  if (typeof revPSGrowthQ === 'number' || typeof revPSGrowthA === 'number') {
+    if ((revPSGrowthQ ?? -Infinity) > 0.08 || (revPSGrowthA ?? -Infinity) > 0.07) {
+      signals.push({ category: 'growth', indicator: 'Revenue/Share Growth', signal: 'buy', score: 1 });
+    } else if ((revPSGrowthQ ?? Infinity) < -0.08 || (revPSGrowthA ?? Infinity) < -0.07) {
+      signals.push({ category: 'growth', indicator: 'Revenue/Share Growth', signal: 'sell', score: -1 });
     } else {
-      score = 0;
+      signals.push({ category: 'growth', indicator: 'Revenue/Share Growth', signal: 'hold', score: 0 });
     }
-    signals.push({
-      indicator: 'Revenue Per Share Growth (Y)',
-      value: revPSGrowthA,
-      signal,
-      score,
-    });
   }
 
-  // Book value per share growth
-  const bpsValuesQ = finQ
+  // BVPS growth
+  const bvpsValuesQ = finQ
     .map((r: any) => {
-      const equity =
-        r.financials?.balance_sheet?.equity?.value ??
-        r.financials?.balance_sheet?.stockholders_equity?.value ??
-        r.financials?.balance_sheet?.total_stockholders_equity?.value;
-      const shares = sharesFor(r);
-      return typeof equity === 'number' && typeof shares === 'number' && shares > 0
-        ? equity / shares
-        : undefined;
+      const eq =
+        getNested(r, ['financials', 'balance_sheet', 'stockholders_equity', 'value']) ??
+        getNested(r, ['financials', 'balance_sheet', 'total_stockholders_equity', 'value']);
+      const sh = sharesFor(r);
+      return typeof eq === 'number' && typeof sh === 'number' && sh > 0 ? eq / sh : undefined;
     })
     .filter((v): v is number => Number.isFinite(v));
-  const bpsGrowthQ = computeGrowthFromValues(bpsValuesQ);
-  if (typeof bpsGrowthQ === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(bpsGrowthQ) * 100));
-    if (bpsGrowthQ > 0.05) {
-      signal = 'buy';
-    } else if (bpsGrowthQ < -0.05) {
-      signal = 'sell';
-    } else {
-      score = 0;
-    }
-    signals.push({
-      indicator: 'Book Value Per Share Growth (Q)',
-      value: bpsGrowthQ,
-      signal,
-      score,
-    });
-  }
-
-  const bpsValuesA = finA
+  const bvpsValuesA = finA
     .map((r: any) => {
-      const equity =
-        r.financials?.balance_sheet?.equity?.value ??
-        r.financials?.balance_sheet?.stockholders_equity?.value ??
-        r.financials?.balance_sheet?.total_stockholders_equity?.value;
-      const shares = sharesFor(r);
-      return typeof equity === 'number' && typeof shares === 'number' && shares > 0
-        ? equity / shares
-        : undefined;
+      const eq =
+        getNested(r, ['financials', 'balance_sheet', 'stockholders_equity', 'value']) ??
+        getNested(r, ['financials', 'balance_sheet', 'total_stockholders_equity', 'value']);
+      const sh = sharesFor(r);
+      return typeof eq === 'number' && typeof sh === 'number' && sh > 0 ? eq / sh : undefined;
     })
     .filter((v): v is number => Number.isFinite(v));
-  const bpsGrowthA = computeGrowthFromValues(bpsValuesA);
-  if (typeof bpsGrowthA === 'number') {
-    let signal: 'buy' | 'sell' | 'hold' = 'hold';
-    let score = Math.min(100, Math.round(Math.abs(bpsGrowthA) * 100));
-    if (bpsGrowthA > 0.05) {
-      signal = 'buy';
-    } else if (bpsGrowthA < -0.05) {
-      signal = 'sell';
+  const bvpsGrowthQ = computeGrowthFromValues(bvpsValuesQ);
+  const bvpsGrowthA = computeGrowthFromValues(bvpsValuesA);
+  if (typeof bvpsGrowthQ === 'number' || typeof bvpsGrowthA === 'number') {
+    if ((bvpsGrowthQ ?? -Infinity) > 0.08 || (bvpsGrowthA ?? -Infinity) > 0.07) {
+      signals.push({ category: 'growth', indicator: 'BVPS Growth', signal: 'buy', score: 1 });
+    } else if ((bvpsGrowthQ ?? Infinity) < -0.08 || (bvpsGrowthA ?? Infinity) < -0.07) {
+      signals.push({ category: 'growth', indicator: 'BVPS Growth', signal: 'sell', score: -1 });
     } else {
-      score = 0;
+      signals.push({ category: 'growth', indicator: 'BVPS Growth', signal: 'hold', score: 0 });
     }
-    signals.push({
-      indicator: 'Book Value Per Share Growth (Y)',
-      value: bpsGrowthA,
-      signal,
-      score,
-    });
   }
 
   return signals;
