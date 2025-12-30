@@ -4,131 +4,117 @@ This small example fetches market data from Polygon.io, generates indicator sign
 
 ## Signal Reference
 
-Update this section whenever a new indicator signal is added.
+### Composite Buy/Sell Signal Framework
 
-### RSI
-- **Buy:** RSI < 30
-- **Sell:** RSI > 70
+This system combines technical, fundamental, and growth indicators into a weighted scoring model. Each individual signal contributes a bullish (+), bearish (–), or neutral (0) score. The composite is normalized and mapped to a final recommendation.
 
-### Simple Moving Average (SMA)
-- **Buy:** price is more than 0.1% above the SMA
-- **Sell:** price is more than 0.1% below the SMA
+#### Weighting
+- Technical indicators – 40%
+- Fundamentals – 40%
+- Growth metrics – 20%
 
-### 52-Week High/Low
-- **Buy:** price is within 1% of the 52-week low
-- **Sell:** price is within 1% of the 52-week high
+### Technical Indicators (40%)
+#### RSI
+- **Buy (+2):** RSI < 35
+- **Sell (–2):** RSI > 65
 
-### Short Interest
-- If short interest percent is available:
-  - **Buy:** short interest < 5% of float
-  - **Sell:** short interest > 20% of float
-- Otherwise, using days to cover:
-  - **Buy:** days to cover < 1
-  - **Sell:** days to cover > 5
+#### SMA Trend
+- **Buy (+1):** Price ≥ 0.5% above SMA and slope upward
+- **Sell (–1):** Price ≤ 0.5% below SMA and slope downward
 
-### Short Volume
-- **Buy:** short volume ratio < 0.2
-- **Sell:** short volume ratio > 0.4
+#### EMA Trend
+- **Buy (+1):** Price ≥ 0.5% above EMA and slope upward
+- **Sell (–1):** Price ≤ 0.5% below EMA and slope downward
 
-### Exponential Moving Average (EMA)
-- **Buy:** price is more than 0.1% above the EMA
-- **Sell:** price is more than 0.1% below the EMA
+#### MACD
+- **Buy (+2):** Bullish cross and histogram > 0
+- **Sell (–2):** Bearish cross and histogram < 0
 
-### MACD
-- **Buy:** histogram and MACD–signal are positive, MACD or histogram crosses above zero, or histogram rises from a recent low while MACD approaches a bullish cross
-- **Sell:** histogram and MACD–signal are negative or MACD/histogram cross below zero
+#### 52-Week High/Low
+- **Buy (+1):** Within 2% of 52-week low with volume confirmation
+- **Sell (–1):** Within 2% of 52-week high with momentum stalling
 
-### Current Ratio
-- **Buy:** current ratio > 1.5
-- **Sell:** current ratio < 1.0
+#### Short Interest
+- If % of float available:
+  - **Buy (+1):** < 10%
+  - **Sell (–1):** > 25%
+- Else using days-to-cover:
+  - **Buy (+1):** < 2
+  - **Sell (–1):** > 6
 
-### Debt/Equity
-- **Buy:** debt/equity < 1
-- **Sell:** debt/equity > 2
+#### Short Volume Ratio
+- **Buy (+1):** < 0.25
+- **Sell (–1):** > 0.45
 
-### Net Margin
-- **Buy:** net margin > 10%
-- **Sell:** net margin < 0%
+### Fundamentals (40%)
+#### Current Ratio
+- **Buy (+1):** > 2.0
+- **Sell (–1):** < 1.0
 
-### Operating Cash Flow
-- **Buy:** operating cash flow > 0
-- **Sell:** operating cash flow < 0
+#### Debt/Equity
+- **Buy (+1):** < 0.8
+- **Sell (–1):** > 2.5
 
-### Net Cash Flow
-- **Buy:** net cash flow > 0
-- **Sell:** net cash flow < 0
+#### Net Margin
+- **Buy (+2):** > 12%
+- **Sell (–2):** < 0%
 
-### Price/Earnings
-- **Buy:** P/E < 15
-- **Sell:** P/E > 30 or P/E < 0
+#### Operating Cash Flow
+- **Buy (+1):** OCF positive and growing ≥ 3 consecutive quarters
+- **Sell (–1):** OCF negative ≥ 2 consecutive quarters
 
-### Price/Sales
-- **Buy:** P/S < 1
-- **Sell:** P/S > 3
+#### Net Cash Flow
+- **Buy (+1):** Net CF positive
+- **Sell (–1):** Net CF negative in >2 of last 4 quarters
 
-### Price/Revenue
-- **Buy:** P/R < 1
-- **Sell:** P/R > 3
+#### PE Ratio
+- **Buy (+1):** PE 8–18
+- **Sell (–1):** PE > 35 or < 0
 
-### Book Value Per Share
-- **Buy:** price < book value per share
-- **Sell:** book value per share ≤ 0 or price > 2× book value per share
+#### Price/Sales Ratio
+- **Buy (+1):** P/S < 2
+- **Sell (–1):** P/S > 4
 
-### Comprehensive Income
-- **Buy:** comprehensive income > 0
-- **Sell:** comprehensive income < 0
+#### Price/Revenue Ratio
+- **Buy (+1):** P/R < 2
+- **Sell (–1):** P/R > 4
 
-### Revenue Growth (Q)
-- **Buy:** quarterly revenue growth > 5%
-- **Sell:** quarterly revenue growth < -5%
+#### Price/BVPS
+- **Buy (+1):** Price ≤ 0.9 × BVPS
+- **Sell (–1):** BVPS ≤ 0 or Price ≥ 2.5 × BVPS
 
-### Revenue Growth (Y)
-- **Buy:** yearly revenue growth > 5%
-- **Sell:** yearly revenue growth < -5%
+#### Comprehensive Income
+- **Buy (+1):** Positive ≥ 2 periods
+- **Sell (–1):** Negative ≥ 2 periods
 
-### Net Income Growth (Q)
-- **Buy:** quarterly net income growth > 5%
-- **Sell:** quarterly net income growth < -5%
+### Growth Metrics (20%)
+#### Revenue Growth
+- **Buy (+1):** Quarterly > 8% or Yearly > 7%
+- **Sell (–1):** Quarterly < –8% or Yearly < –7%
 
-### Net Income Growth (Y)
-- **Buy:** yearly net income growth > 5%
-- **Sell:** yearly net income growth < -5%
+#### Net Income Growth
+- **Buy (+1):** Quarterly > 8% or Yearly > 7%
+- **Sell (–1):** Quarterly < –8% or Yearly < –7%
 
-### Operating Cash Flow Growth (Q)
-- **Buy:** quarterly operating cash flow growth > 5%
-- **Sell:** quarterly operating cash flow growth < -5%
+#### Operating Cash Flow Growth
+- **Buy (+1):** Quarterly > 8% or Yearly > 7%
+- **Sell (–1):** Quarterly < –8% or Yearly < –7%
 
-### Operating Cash Flow Growth (Y)
-- **Buy:** yearly operating cash flow growth > 5%
-- **Sell:** yearly operating cash flow growth < -5%
+#### EPS Growth
+- **Buy (+2):** Quarterly > 8% or Yearly > 7%
+- **Sell (–2):** Quarterly < –8% or Yearly < –7%
 
-### Share Dilution
-- **Buy:** shares outstanding decrease by more than 2% without large single-period drops
-- **Sell:** shares outstanding increase by more than 2% or show consistent increases
+#### Share Dilution
+- **Buy (+1):** Shares decrease > 3% (excluding distress events)
+- **Sell (–1):** Shares increase > 3% or show consistent dilution trend
 
-### EPS Growth (Q)
-- **Buy:** quarterly EPS growth > 5%
-- **Sell:** quarterly EPS growth < -5%
+#### Revenue/Share Growth
+- **Buy (+1):** RPS growth > 8% (Q) or > 7% (Y)
+- **Sell (–1):** RPS growth < –8% (Q) or < –7% (Y)
 
-### EPS Growth (Y)
-- **Buy:** yearly EPS growth > 5%
-- **Sell:** yearly EPS growth < -5%
-
-### Revenue Per Share Growth (Q)
-- **Buy:** quarterly revenue per share growth > 5%
-- **Sell:** quarterly revenue per share growth < -5%
-
-### Revenue Per Share Growth (Y)
-- **Buy:** yearly revenue per share growth > 5%
-- **Sell:** yearly revenue per share growth < -5%
-
-### Book Value Per Share Growth (Q)
-- **Buy:** quarterly book value per share growth > 5%
-- **Sell:** quarterly book value per share growth < -5%
-
-### Book Value Per Share Growth (Y)
-- **Buy:** yearly book value per share growth > 5%
-- **Sell:** yearly book value per share growth < -5%
+#### BVPS Growth
+- **Buy (+1):** BVPS growth > 8% (Q) or > 7% (Y)
+- **Sell (–1):** BVPS growth < –8% (Q) or < –7% (Y)
 
 ## Setup
 

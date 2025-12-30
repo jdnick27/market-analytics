@@ -16,12 +16,13 @@ function previousDay(): string {
     return `${y}-${m}-${day}`;
 }
 
-function aggregateSignalScore(signals: IndicatorSignal[]): number {
-  return signals.reduce((total, s) => {
-    if (s.signal === 'buy') return total + s.score;
-    if (s.signal === 'sell') return total - s.score;
-    return total;
-  }, 0);
+function compositeScore(signals: IndicatorSignal[]): number {
+  const totals = { technical: 0, fundamental: 0, growth: 0 };
+  for (const s of signals) totals[s.category] += s.score;
+  const normTech = totals.technical / 9; // max +/-9
+  const normFund = totals.fundamental / 11; // max +/-11
+  const normGrowth = totals.growth / 8; // max +/-8
+  return 0.4 * normTech + 0.4 * normFund + 0.2 * normGrowth;
 }
 
 async function main(): Promise<void> {
@@ -51,20 +52,20 @@ async function main(): Promise<void> {
     const BATCH_SIZE = 5;
     const results = await mapBatched(tickers, BATCH_SIZE, async (symbol) => {
       const signals = await generateSignals(symbol, date);
-      const score = aggregateSignalScore(signals);
+      const score = compositeScore(signals);
       return { symbol, signals, score };
     });
 
     results.forEach(({ symbol, signals, score }) => {
       console.log(`\n${symbol} signals:`, signals);
-      console.log(`Total score: ${score}`);
+      console.log(`Composite score: ${score}`);
     });
 
     const sorted = results.slice().sort((a, b) => b.score - a.score);
     const bestTickers = sorted.filter((r) => r.score > 0);
     const worstTickers = sorted.filter((r) => r.score < 0).reverse();
-    console.log('\nTop Stocks to Buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
-    console.log('Top Stocks to Sell:', worstTickers.map((r) => `${r.symbol} (${r.score})`));
+    console.log('\nTop Stocks to Buy:', bestTickers.map((r) => `${r.symbol} (${r.score.toFixed(2)})`));
+    console.log('Top Stocks to Sell:', worstTickers.map((r) => `${r.symbol} (${r.score.toFixed(2)})`));
 
     const indicatorKeys = Array.from(
       new Set(results.flatMap(({ signals }) => signals.map((s) => s.indicator)))
