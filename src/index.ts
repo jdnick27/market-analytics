@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { generateSignals, IndicatorSignal } from './signals';
-import { formatPosts, Snapshot } from './makePosts';
+import * as XLSX from 'xlsx';
 
 // tiny contract:
 // input: none – fetches an array of tickers from Polygon.io
@@ -66,46 +66,39 @@ async function main(): Promise<void> {
     console.log('\nTop Stocks to Buy:', bestTickers.map((r) => `${r.symbol} (${r.score})`));
     console.log('Top Stocks to Sell:', worstTickers.map((r) => `${r.symbol} (${r.score})`));
 
-    // Create posts summarizing signals for the top 5 stocks to buy
-    const topBuys = bestTickers.slice(0, 5);
-    const buySnapshots: Snapshot[] = topBuys.map(({ symbol, signals, score }) => ({
-      ticker: symbol,
-      score,
-      indicators: Object.fromEntries(
-        signals.map((s) => [s.indicator, s.signal])
-      ) as Record<string, 'buy' | 'sell' | 'hold'>,
-    }));
+    const indicatorKeys = Array.from(
+      new Set(results.flatMap(({ signals }) => signals.map((s) => s.indicator)))
+    ).sort();
 
-    // Create posts summarizing signals for the top 5 stocks to sell
-    const topSells = worstTickers.slice(0, 5);
-    const sellSnapshots: Snapshot[] = topSells.map(({ symbol, signals, score }) => ({
-      ticker: symbol,
-      score,
-      indicators: Object.fromEntries(
-        signals.map((s) => [s.indicator, s.signal])
-      ) as Record<string, 'buy' | 'sell' | 'hold'>,
-    }));
+    const buildRows = (items: typeof results) =>
+      items.map(({ symbol, signals, score }) => {
+        const indicatorMap = Object.fromEntries(
+          signals.map((s) => [s.indicator, s.signal])
+        ) as Record<string, 'buy' | 'sell' | 'hold'>;
 
-    const buyPosts = formatPosts(buySnapshots, {
-      maxBullets: 3,
-      emojis: {
-        header: ['🚀', '📉', '📊'],
-        strength: '🟢',
-        weakness: '🔴',
-      },
-      hashtags: [],
-    });
-    const sellPosts = formatPosts(sellSnapshots, {
-      maxBullets: 3,
-      emojis: {
-        header: ['🚀', '📉', '📊'],
-        strength: '🟢',
-        weakness: '🔴',
-      },
-      hashtags: [],
-    });
-    console.log('\nPosts (Top Stocks to Buy):', buyPosts);
-    console.log('\nPosts (Top Stocks to Sell):', sellPosts);
+        return {
+          Symbol: symbol,
+          Score: score,
+          ...Object.fromEntries(
+            indicatorKeys.map((key) => [key, indicatorMap[key] ?? ''])
+          ),
+        };
+      });
+
+    const workbook = XLSX.utils.book_new();
+    const allSheet = XLSX.utils.json_to_sheet(buildRows(results));
+    XLSX.utils.book_append_sheet(workbook, allSheet, 'All Signals');
+
+    const topBuys = bestTickers.slice(0, 10);
+    const topSells = worstTickers.slice(0, 10);
+    const buySheet = XLSX.utils.json_to_sheet(buildRows(topBuys));
+    XLSX.utils.book_append_sheet(workbook, buySheet, 'Top Buys');
+    const sellSheet = XLSX.utils.json_to_sheet(buildRows(topSells));
+    XLSX.utils.book_append_sheet(workbook, sellSheet, 'Top Sells');
+
+    const outputFile = `market-signals-${date}.xlsx`;
+    XLSX.writeFile(workbook, outputFile);
+    console.log(`\nSaved Excel report to ${outputFile}`);
   } catch (err: any) {
     console.error('Error fetching market data:', err?.message || err);
     process.exitCode = 1;
