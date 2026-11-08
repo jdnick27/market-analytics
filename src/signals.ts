@@ -9,7 +9,7 @@ import {
   getShortVolume,
   getSharesOutstanding,
   getFinancialsHistory,
-} from './polygonClient';
+} from './massiveClient';
 
 export interface IndicatorSignal {
   indicator: string;
@@ -111,7 +111,7 @@ export async function generateSignals(symbol: string, date = previousDay()): Pro
     getFinancialsHistory(symbol, 'annual', 10),
   ]);
 
-  // oc is Polygon open-close response which has .close
+  // oc is Massive open-close response which has .close
   const price: number | undefined = oc?.close;
   const signals: IndicatorSignal[] = [];
 

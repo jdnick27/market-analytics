@@ -2,7 +2,7 @@ import axios from 'axios';
 import http from 'http';
 import https from 'https';
 
-const BASE = 'https://api.polygon.io';
+const BASE = 'https://api.massive.com';
 
 // Configure global axios agents to reuse sockets and limit concurrent sockets.
 // This reduces the chance of `ECONNRESET` / "socket hang up" when the app
@@ -14,16 +14,16 @@ axios.defaults.httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50 })
 export const REQUEST_TIMEOUT = 120000;
 
 function getApiKey(): string {
-  const k = process.env.POLYGON_API_KEY;
-  if (!k) throw new Error('POLYGON_API_KEY not set in environment');
+  const k = process.env.MASSIVE_API_KEY;
+  if (!k) throw new Error('MASSIVE_API_KEY not set in environment');
   return k;
 }
 
 /**
- * Helper to perform a GET request against the Polygon API with common settings
+ * Helper to perform a GET request against the Massive API with common settings
  * and error handling. Automatically attaches the API key and request timeout.
  */
-async function polygonGet(path: string, params: Record<string, any> = {}): Promise<any> {
+async function massiveGet(path: string, params: Record<string, any> = {}): Promise<any> {
   const apiKey = getApiKey();
   const url = `${BASE}${path}`;
   try {
@@ -34,7 +34,7 @@ async function polygonGet(path: string, params: Record<string, any> = {}): Promi
     return res.data;
   } catch (err: any) {
     if (err.response) {
-      const msg = `Polygon API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
+      const msg = `Massive API error: ${err.response.status} ${err.response.statusText} - ${JSON.stringify(err.response.data)}`;
       const e: any = new Error(msg);
       e.status = err.response.status;
       throw e;
@@ -44,7 +44,7 @@ async function polygonGet(path: string, params: Record<string, any> = {}): Promi
 }
 
 export async function listTickers(limit = 3): Promise<string[]> {
-  const data = await polygonGet('/v3/reference/tickers', {
+  const data = await massiveGet('/v3/reference/tickers', {
     market: 'stocks',
     active: true,
     limit,
@@ -54,25 +54,25 @@ export async function listTickers(limit = 3): Promise<string[]> {
 
 export async function getTicker(ticker: string): Promise<any> {
   if (!ticker) throw new Error('ticker is required');
-  return polygonGet(`/v3/reference/tickers/${encodeURIComponent(ticker)}`);
+  return massiveGet(`/v3/reference/tickers/${encodeURIComponent(ticker)}`);
 }
 
 export async function fetchLastTrade(symbol: string): Promise<any> {
   if (!symbol) throw new Error('symbol is required');
-  return polygonGet(`/v2/last/trade/${encodeURIComponent(symbol)}`);
+  return massiveGet(`/v2/last/trade/${encodeURIComponent(symbol)}`);
 }
 
 export async function getOpenClose(symbol: string, date: string): Promise<any> {
   if (!symbol) throw new Error('symbol is required');
   if (!date) throw new Error('date is required (YYYY-MM-DD)');
-  return polygonGet(`/v1/open-close/${encodeURIComponent(symbol)}/${encodeURIComponent(date)}`);
+  return massiveGet(`/v1/open-close/${encodeURIComponent(symbol)}/${encodeURIComponent(date)}`);
 }
 
 // Technical indicators
 
 export async function getSMA(symbol: string, window = 50, timespan = 'day'): Promise<any> {
   if (!symbol) throw new Error('symbol is required');
-  const data = await polygonGet(`/v1/indicators/sma/${encodeURIComponent(symbol)}`, {
+  const data = await massiveGet(`/v1/indicators/sma/${encodeURIComponent(symbol)}`, {
     timespan,
     window,
     series_type: 'close',
@@ -83,7 +83,7 @@ export async function getSMA(symbol: string, window = 50, timespan = 'day'): Pro
 
 export async function getEMA(symbol: string, window = 50, timespan = 'day'): Promise<any> {
   if (!symbol) throw new Error('symbol is required');
-  const data = await polygonGet(`/v1/indicators/ema/${encodeURIComponent(symbol)}`, {
+  const data = await massiveGet(`/v1/indicators/ema/${encodeURIComponent(symbol)}`, {
     timespan,
     window,
     series_type: 'close',
@@ -100,7 +100,7 @@ export async function getMACD(
   timespan = 'day',
 ): Promise<any> {
   if (!symbol) throw new Error('symbol is required');
-  const data = await polygonGet(`/v1/indicators/macd/${encodeURIComponent(symbol)}`, {
+  const data = await massiveGet(`/v1/indicators/macd/${encodeURIComponent(symbol)}`, {
     timespan,
     short_window: shortWindow,
     long_window: longWindow,
@@ -113,7 +113,7 @@ export async function getMACD(
 
 export async function getRSI(symbol: string, window = 14, timespan = 'day'): Promise<any> {
   if (!symbol) throw new Error('symbol is required');
-  const data = await polygonGet(`/v1/indicators/rsi/${encodeURIComponent(symbol)}`, {
+  const data = await massiveGet(`/v1/indicators/rsi/${encodeURIComponent(symbol)}`, {
     timespan,
     window,
     series_type: 'close',
@@ -137,7 +137,7 @@ export async function get52WeekHighLow(symbol: string, toDate: string): Promise<
   const fromStr = `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`;
   const toStr = `${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`;
 
-  const data = await polygonGet(
+  const data = await massiveGet(
     `/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/1/day/${encodeURIComponent(fromStr)}/${encodeURIComponent(toStr)}`,
     { adjusted: true, limit: 1000 },
   );
@@ -162,7 +162,7 @@ export async function get52WeekHighLow(symbol: string, toDate: string): Promise<
 
 export async function getShortInterest(ticker: string): Promise<any> {
   if (!ticker) throw new Error('ticker is required');
-  const data = await polygonGet('/stocks/v1/short-interest', { ticker });
+  const data = await massiveGet('/stocks/v1/short-interest', { ticker });
   const results = data?.results;
   return Array.isArray(results) ? results[0] ?? null : results ?? null;
 }
@@ -170,13 +170,13 @@ export async function getShortInterest(ticker: string): Promise<any> {
 export async function getShortVolume(ticker: string, date: string): Promise<any> {
   if (!ticker) throw new Error('ticker is required');
   if (!date) throw new Error('date is required (YYYY-MM-DD)');
-  const data = await polygonGet('/stocks/v1/short-volume', { ticker, date });
+  const data = await massiveGet('/stocks/v1/short-volume', { ticker, date });
   const results = data?.results;
   return Array.isArray(results) ? results[0] ?? null : results ?? null;
 }
 
 /**
- * Return shares outstanding for a ticker using the Polygon ticker overview endpoint.
+ * Return shares outstanding for a ticker using the Massive ticker overview endpoint.
  * Returns a number (shares) or null if unavailable.
  */
 export async function getSharesOutstanding(ticker: string): Promise<number | null> {
@@ -211,12 +211,12 @@ export async function getSharesOutstanding(ticker: string): Promise<number | nul
 
 /**
  * Fetch the latest financials for a given ticker.
- * Docs: https://polygon.io/docs/rest/stocks/fundamentals/financials
+ * Docs: https://massive.com/docs/rest/stocks/fundamentals/financials
  * Returns the first result object or null if none.
  */
 export async function getFinancials(ticker: string): Promise<any> {
   if (!ticker) throw new Error('ticker is required');
-  const data = await polygonGet('/vX/reference/financials', { ticker, limit: 1 });
+  const data = await massiveGet('/vX/reference/financials', { ticker, limit: 1 });
   const results = data?.results;
   return Array.isArray(results) ? results[0] ?? null : results ?? null;
 }
@@ -234,7 +234,7 @@ export async function getFinancialsHistory(
   limit = 10,
 ): Promise<any[]> {
   if (!ticker) throw new Error('ticker is required');
-  const data = await polygonGet('/vX/reference/financials', { ticker, timeframe, limit });
+  const data = await massiveGet('/vX/reference/financials', { ticker, timeframe, limit });
   const results: any[] = Array.isArray(data?.results) ? data.results : [];
   // Sort by end_date descending so index 0 is the most recent filing
   return results.sort((a, b) => new Date(b.end_date).getTime() - new Date(a.end_date).getTime());

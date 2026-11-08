@@ -1,7 +1,7 @@
 {
   "name": "market-analytics",
   "version": "0.1.0",
-  "description": "Small example: fetch stock data from polygon.io and print to console",
+  "description": "Small example: fetch stock data from Massive API and print to console",
   "main": "src/index.js",
   "scripts": {
     "test": "ts-node src/index.ts"
@@ -11,7 +11,7 @@
   "dependencies": {
     "axios": "^1.4.0",
     "dotenv": "^16.1.4",
-    "xlsx": "^0.18.5"
+    "googleapis": "^169.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.5.0",

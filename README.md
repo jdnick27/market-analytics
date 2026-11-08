@@ -1,6 +1,6 @@
-# market-analytics — polygon.io example
+# market-analytics — Massive API example
 
-This small example fetches market data from Polygon.io, generates indicator signals for many tickers, and prints both the top stocks to buy and the top stocks to sell.
+This small example fetches market data from Massive (formerly Polygon.io), generates indicator signals for many tickers, and prints both the top stocks to buy and the top stocks to sell.
 
 ## Signal Reference
 
@@ -132,9 +132,9 @@ Update this section whenever a new indicator signal is added.
 
 ## Setup
 
-1. Copy `.env` and add your Polygon API key:
+1. Copy `.env` and add your Massive API key:
 
-   POLYGON_API_KEY=your_real_key_here
+   MASSIVE_API_KEY=your_real_key_here
 
 2. Install dependencies:
 
@@ -152,7 +152,7 @@ npm test
 ## Testing
 
 ```bash
-# requires POLYGON_API_KEY in your environment or .env file
+# requires MASSIVE_API_KEY in your environment or .env file
 npm test
 ```
 
